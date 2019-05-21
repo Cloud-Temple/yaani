@@ -45,6 +45,10 @@ import:
 
 The values passed to group_by can be Netbox keys or key paths (explained later).
 
+Tags can be used for grouping feature as well as any key found in a Netbox object.
+
+*CAUTION*: Please pay attention to the fact that a same value found in two differents keys in Netbox will point to the same group and with mixed elements in the group.
+
 ### Filter
 
 The filter statement allows one to filter elements requested to Netbox API. It narrows the search by the mean of a filter appended to the API URL.
@@ -118,6 +122,31 @@ optional arguments:
 
 ```
 ./yaani.py -c netbox.yml --list
+```
+
+## Example
+
+I want to get every device that matches a specific role. I want them grouped by tags and rack names, and I want to load their primary IP as hostvars under the name primary_ip.
+I also want all the racks to be loaded with all possible information under the name rack_main.
+
+```
+netbox:
+  api:
+    api_url: "https://netbox.private.lan/api/"
+    # api_token: "<Netbox token>"
+
+  import:
+    devices:
+      filter: "role_id=<id of the role in Netbox>"
+      group_by:
+        - rack.name
+        - tags
+      host_vars:
+        primary_ip: primary_ip.address
+
+    racks:
+      host_vars:
+        rack_main: ALL
 ```
 
 ## Authors
