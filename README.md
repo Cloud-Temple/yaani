@@ -127,4 +127,3 @@ optional arguments:
 ## Acknowledgments
 
 * Inspired from https://github.com/AAbouZaid/netbox-as-ansible-inventory project (https://github.com/AAbouZaid)
-
