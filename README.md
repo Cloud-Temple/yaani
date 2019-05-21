@@ -49,6 +49,11 @@ Tags can be used for grouping feature as well as any key found in a Netbox objec
 
 *CAUTION*: Please pay attention to the fact that a same value found in two differents keys in Netbox will point to the same group and with mixed elements in the group.
 
+### Group prefix
+
+If the group_by statement is used, it is possible to prefix every group name created for an import statement with the given prefix. It allows one to avoid
+having conflicting group names for elements of differents types.
+
 ### Filter
 
 The filter statement allows one to filter elements requested to Netbox API. It narrows the search by the mean of a filter appended to the API URL.
@@ -127,6 +132,7 @@ optional arguments:
 ## Example
 
 I want to get every device that matches a specific role. I want them grouped by tags and rack names, and I want to load their primary IP as hostvars under the name primary_ip.
+The group names for devices must be prefixed with the 'dev_' string.
 I also want all the racks to be loaded with all possible information under the name rack_main.
 
 ```
@@ -141,6 +147,7 @@ netbox:
       group_by:
         - rack.name
         - tags
+      group_prefix: 'dev_'
       host_vars:
         primary_ip: primary_ip.address
 

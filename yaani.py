@@ -221,7 +221,7 @@ class InventoryBuilder:
 		if netbox_hosts_list:
 			for host in netbox_hosts_list:
 				self._add_element_to_inventory(
-					host, inventory, import_type, import_options.get('group_by', None))
+					host, inventory, import_type, import_options.get('group_by', None), import_options.get('group_prefix', None))
 				self._load_element_vars(
 					host, inventory, import_options.get('host_vars', None))
 
@@ -266,18 +266,22 @@ class InventoryBuilder:
 
 		return pointer
 
-	def _add_element_to_inventory(self, host, inventory, obj_type, group_by=None):
+	def _add_element_to_inventory(self, host, inventory, obj_type, group_by=None, group_prefix=None):
 		element_name = host.get('name')
-
 		if group_by:
 			for group in group_by:
 				if self._dig_value(key_path=group, data=host) != None:
 					if group == 'tags':
 						for tag in host.get(group):
+							group_name = tag
+							if group_prefix != None:
+								group_name = group_prefix + group_name
 							self._add_element_to_group(
-								element_name=element_name, group_name=tag, inventory=inventory)
+								element_name=element_name, group_name=group_name, inventory=inventory)
 					else:
 						group_name = self._dig_value(key_path=group, data=host)
+						if group_prefix:
+							group_name = group_prefix + group_name
 						self._add_element_to_group(
 							element_name=element_name, group_name=group_name, inventory=inventory)
 		# Anyway, add the host to its main type group: devices, racks etc.
