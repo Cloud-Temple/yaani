@@ -50,7 +50,7 @@ def parse_cli_args(script_args):
         help="""Path for script's configuration file. If None is specified,
                 default value is %s environment variable or netbox.yml in the
                 current dir.""" % DEFAULT_ENV_CONFIG_FILE
-        )
+    )
     parser.add_argument(
         '--list', action='store_true',
         help="""Print the entire inventory with hostvars respecting
