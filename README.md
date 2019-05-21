@@ -45,6 +45,11 @@ import:
 
 The values passed to group_by can be Netbox keys or key paths (explained later).
 
+### Group prefix
+
+If the group_by statement is used, it is possible to prefix every group name created for an import statement with the given prefix. It allows one to avoid
+having conflicting group names for elements of differents types.
+
 ### Filter
 
 The filter statement allows one to filter elements requested to Netbox API. It narrows the search by the mean of a filter appended to the API URL.

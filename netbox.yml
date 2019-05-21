@@ -28,6 +28,10 @@ netbox:
         # - rack.name
         - tags
 
+      # Optionnal field. If the group_by statement is used, this will prefix every group name created for the current import statement
+      # with the given prefix. This is used to avoid colliding group names for different types of element.
+      group_prefix: 'dev_'
+
       # The host_vars field is optionnal. It configures which variable form Netbox to load as hostvars in the inventory.
       host_vars:
         # The key is the name of the variable in the inventory. The value is the name of the key where to find the information
