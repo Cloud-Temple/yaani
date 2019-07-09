@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python2
 
 from __future__ import absolute_import
 
@@ -408,7 +408,7 @@ def main():
 
     try:
         if os.environ['netbox']:
-            configuration = {'netbox': yaml.safe_load(os.environ)}
+            configuration = {'netbox': yaml.safe_load(os.environ['netbox'])}
         else:
             configuration = load_config_file(args.config_file)
     except KeyError:
