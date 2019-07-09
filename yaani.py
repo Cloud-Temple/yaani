@@ -405,7 +405,14 @@ def dump_json_inventory(inventory):
 
 def main():
     args = parse_cli_args(sys.argv[1:])
-    configuration = load_config_file(args.config_file)
+
+    try:
+        if os.environ['netbox']:
+            configuration = {'netbox': yaml.safe_load(os.environ)}
+        else:
+            configuration = load_config_file(args.config_file)
+    except KeyError:
+        configuration = load_config_file(args.config_file)
 
     builder = InventoryBuilder(args, configuration)
     dump_json_inventory(builder.build_inventory())
