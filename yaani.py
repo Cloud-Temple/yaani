@@ -255,20 +255,29 @@ class InventoryBuilder:
 
         if netbox_hosts_list:
             for host in netbox_hosts_list:
+                element_name = self._get_identifier(host, import_type)
                 self._add_element_to_inventory(
-                    host, inventory, import_type,
+                    element_name, host, inventory, import_type,
                     import_options.get('group_by', None),
                     import_options.get('group_prefix', None)
                 )
                 self._load_element_vars(
-                    host, inventory, import_options.get('host_vars', None))
+                    element_name, host, inventory, import_options.get('host_vars', None)
+                )
+
+
+    def _get_identifier(self, host, obj_type):
+        r = host.get('name')
+        if r is None or r == "":
+            r = "%s_%s" % (obj_type, host.get('id'))
+        return r
 
     def _ensure_group_exists(self, group_name, inventory):
         inventory.setdefault(group_name, {})
         inventory[group_name].setdefault('hosts', [])
         return inventory
 
-    def _load_element_vars(self, host, inventory, host_vars=None):
+    def _load_element_vars(self, element_name, host, inventory, host_vars=None):
         # If there is no required host var to load, end here.
         if host_vars:
             host_data = {}
@@ -288,7 +297,7 @@ class InventoryBuilder:
             # Add the loaded variables in the inventory under the proper
             # section (name of the host)
             inventory['_meta']['hostvars'].update(
-                {host.get('name'): host_data}
+                {element_name: host_data}
             )
 
     def _dig_value(self, key_path, data):
@@ -309,9 +318,8 @@ class InventoryBuilder:
 
         return pointer
 
-    def _add_element_to_inventory(self, host, inventory, obj_type,
+    def _add_element_to_inventory(self, element_name, host, inventory, obj_type,
                                   group_by=None, group_prefix=None):
-        element_name = host.get('name')
         if group_by:
             for group in group_by:
                 if self._dig_value(key_path=group, data=host) is not None:
@@ -332,9 +340,13 @@ class InventoryBuilder:
                             element_name=element_name, group_name=group_name,
                             inventory=inventory
                         )
-        # Anyway, add the host to its main type group: devices, racks etc.
+        # Anyway, add the host to its main type group: devices, racks etc. and to the
+        # group 'all'
         self._add_element_to_group(
             element_name=element_name, group_name=obj_type, inventory=inventory
+        )
+        self._add_element_to_group(
+            element_name=element_name, group_name='all', inventory=inventory
         )
 
     def _add_element_to_group(self, element_name, group_name, inventory):

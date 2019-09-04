@@ -85,6 +85,8 @@ Key path can also be specified instead of simple Netbox key name.
 
 A special 'ALL' keyword is provided in order to load the entire piece of information from Netbox.
 
+In case a host has no name in Netbox, it is named after its Netbox ID, prefixed by its object type.
+
 #### Example
 ```
 
