@@ -38,7 +38,8 @@ netbox:
         # in the output returned by Netbox.
         # Example:
         rack_name: rack.name
-        ip: primary_ip.address
+        ip_with_cidr: primary_ip.address
+        ip_without_cidr: primary_ip.address | sub("/[0-9]{2}", "")
 
         # The 'ALL' keyword as a value loads the entire dict returned by Netbox
         # example:

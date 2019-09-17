@@ -12,9 +12,43 @@ try:
 except ImportError:
     import simplejson as json
 
+from lark import Lark, Transformer
+import re
+
 # The name of the Environment variable where to find the path towards the
 # configuration file
 DEFAULT_ENV_CONFIG_FILE = "NETBOX_CONFIG_FILE"
+
+class Transformer(Transformer):
+    """The transformer to apply to tree of type System"""
+    def __init__(self, data):
+        self.data = data
+
+    def expr(self, n):
+        return n[0]
+
+    def key_path(self, n):
+        pointer = self.data
+        for key in n:
+            try:
+                if key in list(pointer.keys()):
+                    pointer = pointer[key]
+                else:
+                    sys.exit(
+                        "Error: The key solving failed "
+                        "in key_path '%s'" % (key_path)
+                    )
+            except AttributeError:
+                return None
+
+        return pointer
+
+    def sub(self, n):
+        pattern = str(n[1]).strip("\"").strip("\'")
+        repl = str(n[2]).strip("\"").strip("\'")
+        if len(n) > 3:
+            return re.sub(pattern, repl, n[0], *list(map(lambda x: int(x), n[3:])))
+        return re.sub(pattern, repl, n[0])
 
 
 def safe_url(url):
@@ -190,6 +224,25 @@ class InventoryBuilder:
         self.api_url = safe_url(self.config_data['api'].get('api_url', None))
         self.api_token = self.config_data['api'].get('api_token', None)
         self.imports = self.config_data.get('import', None)
+        grammar = """
+            expr: sub
+                | key_path
+
+            sub: expr "|" "sub" "(" STRING  "," STRING  ["," NUMBER  ["," NUMBER ]] ")"
+
+            key_path: KEY_NAME ("." KEY_NAME)*
+            KEY_NAME: /[a-zA_Z0-9]+/
+
+            %import common.ESCAPED_STRING   -> STRING
+            %import common.SIGNED_NUMBER    -> NUMBER
+            %import common.WS
+            %ignore WS
+        """
+
+        self.parser = Lark(
+            grammar, start="expr", parser='lalr'
+        )
+
 
     def _init_inventory(self):
         return {'_meta': {'hostvars': {}}}
@@ -518,22 +571,8 @@ class InventoryBuilder:
         Returns:
             The target value
         """
-        key_path_list = key_path.split(".")
-
-        pointer = data
-        for key in key_path_list:
-            try:
-                if key in list(pointer.keys()):
-                    pointer = pointer[key]
-                else:
-                    sys.exit(
-                        "Error: The key solving failed "
-                        "in key_path '%s'" % (key_path)
-                    )
-            except AttributeError:
-                return None
-
-        return pointer
+        t = Transformer(data = data)
+        return t.transform(self.parser.parse(key_path))
 
 def dump_json_inventory(inventory):
     """Dumps the given inventory in json
