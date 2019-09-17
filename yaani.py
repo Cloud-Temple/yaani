@@ -44,11 +44,20 @@ class Transformer(Transformer):
         return pointer
 
     def sub(self, n):
+        if n[0] is None:
+            return None
+        data_str = str(n[0])
         pattern = str(n[1]).strip("\"").strip("\'")
         repl = str(n[2]).strip("\"").strip("\'")
         if len(n) > 3:
-            return re.sub(pattern, repl, n[0], *list(map(lambda x: int(x), n[3:])))
-        return re.sub(pattern, repl, n[0])
+            return re.sub(pattern, repl, data_str, *list(map(lambda x: int(x), n[3:])))
+        return re.sub(pattern, repl, data_str)
+
+    def default_key(self, n):
+        if n[0] is None:
+            return n[1]
+        else:
+            return n[0]
 
 
 def safe_url(url):
@@ -226,12 +235,14 @@ class InventoryBuilder:
         self.imports = self.config_data.get('import', None)
         grammar = """
             expr: sub
+                | default_key
                 | key_path
 
+            default_key: expr "|" "default_key" "(" key_path ")"
             sub: expr "|" "sub" "(" STRING  "," STRING  ["," NUMBER  ["," NUMBER ]] ")"
 
             key_path: KEY_NAME ("." KEY_NAME)*
-            KEY_NAME: /[a-zA_Z0-9]+/
+            KEY_NAME: /[_a-zA-Z0-9]+/
 
             %import common.ESCAPED_STRING   -> STRING
             %import common.SIGNED_NUMBER    -> NUMBER

@@ -110,6 +110,7 @@ be applied.
 The supported builtin are the following :
   - sub: it is used in the same way as the python function 'sub' from the re module. Indeed, it is executed by
     this very function.
+  - key_path: Takes one argument as a key path which value must be returned if the preceding expression value is None.
 
 #### Example
 To point to key 'label' inside the dict a the 'status' key, you can use the following key path :
