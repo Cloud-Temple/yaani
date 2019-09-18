@@ -19,6 +19,7 @@ import re
 # configuration file
 DEFAULT_ENV_CONFIG_FILE = "NETBOX_CONFIG_FILE"
 
+
 class Transformer(Transformer):
     """The transformer to apply to tree of type System"""
     def __init__(self, data):
@@ -50,7 +51,10 @@ class Transformer(Transformer):
         pattern = str(n[1]).strip("\"").strip("\'")
         repl = str(n[2]).strip("\"").strip("\'")
         if len(n) > 3:
-            return re.sub(pattern, repl, data_str, *list(map(lambda x: int(x), n[3:])))
+            return re.sub(
+                pattern, repl, data_str,
+                *list(map(lambda x: int(x), n[3:]))
+            )
         return re.sub(pattern, repl, data_str)
 
     def default_key(self, n):
@@ -239,7 +243,9 @@ class InventoryBuilder:
                 | key_path
 
             default_key: expr "|" "default_key" "(" key_path ")"
-            sub: expr "|" "sub" "(" STRING  "," STRING  ["," NUMBER  ["," NUMBER ]] ")"
+
+            sub: expr "|" "sub" "(" STRING  "," STRING \
+                                    ["," NUMBER  ["," NUMBER ]] ")"
 
             key_path: KEY_NAME ("." KEY_NAME)*
             KEY_NAME: /[_a-zA-Z0-9]+/
@@ -254,17 +260,17 @@ class InventoryBuilder:
             grammar, start="expr", parser='lalr'
         )
 
-
     def _init_inventory(self):
         return {'_meta': {'hostvars': {}}}
 
     def build_inventory(self):
         """Build and return the inventory dict.
         The inventory respects the following principles :
-          - When the script is called with the single argument --list, the script must
-            output to stdout a JSON-encoded hash or dictionary containing all of the
-            groups to be managed. Each group’s value should be either a hash or dictionary
-            containing a list of each host, any child groups, and potential group variables,
+          - When the script is called with the single argument --list, the
+            script must output to stdout a JSON-encoded hash or dictionary
+            containing all of the groups to be managed. Each group’s value
+            should be either a hash or dictionary containing a list of each
+            host, any child groups, and potential group variables,
             or simply a list of hosts:
 
             {
@@ -285,10 +291,12 @@ class InventoryBuilder:
 
             }
 
-          - If any of the elements of a group are empty they may be omitted from the output.
-          - When called with the argument --host <hostname> (where <hostname> is a host from above),
-            the script must print either an empty JSON hash/dictionary, or a hash/dictionary of
-            variables to make available to templates and playbooks. For example:
+          - If any of the elements of a group are empty they may be omitted
+            from the output.
+          - When called with the argument --host <hostname> (where <hostname>
+            is a host from above), the script must print either an empty JSON
+            hash/dictionary, or a hash/dictionary of variables to make
+            available to templates and playbooks. For example:
 
             {
                 "VAR001": "VALUE",
@@ -305,7 +313,8 @@ class InventoryBuilder:
             inventory = self._init_inventory()
 
             # Check whether the import section exists.
-            # If it exists, iterate over each statement, else, execute default behaviour.
+            # If it exists, iterate over each statement, else, execute default
+            # behaviour.
             if self.imports:
                 # Iterate through each import element and resolve it
                 for type_key, import_statement in self.imports.items():
@@ -324,8 +333,8 @@ class InventoryBuilder:
                 )
 
             return inventory
-        # If a host name is specified, return the inventory filled with only its
-        # information
+        # If a host name is specified, return the inventory filled with only
+        # its information
         elif self.host:
             inventory = self._init_inventory()
 
@@ -364,7 +373,8 @@ class InventoryBuilder:
         try:
             endpoint = import_types_endpoints[import_type]
         except KeyError:
-            # If the specified import type is not supported, end program execution.
+            # If the specified import type is not supported, end program
+            # execution.
             sys.exit(
                 "Error: %s type"
                 " is not supported under import section." % import_type
@@ -450,27 +460,31 @@ class InventoryBuilder:
         # Get hosts list.
         return api_output_data["results"]
 
-    def _add_element_to_inventory(self, element_name, host, inventory, obj_type,
-                                  group_by=None, group_prefix=None):
+    def _add_element_to_inventory(self, element_name, host, inventory,
+                                  obj_type, group_by=None, group_prefix=None):
         """Insert the given element in the propper groups.
 
         Args:
             element_name (str): The name of the element
             host (dict): The actual data of the element
-            inventory (dict): The inventory in which the element must be inserted.
+            inventory (dict): The inventory in which the element must be
+                inserted.
             obj_type (str): The type of the element
             group_by (list, optional): The list of group ot create and to add
                 the element to.
             group_prefix (str, optional): An optional prefix to add in front of
                 group names that will be created.
         """
-        # If the group_by option is specified, insert the element in the propper
-        # groups.
+        # If the group_by option is specified, insert the element in the
+        # propper groups.
         if group_by:
             # Iterate over every groups
             for group in group_by:
                 # Check that the specified group points towards an actual value
-                if self._resolve_expression(key_path=group, data=host) is not None:
+                if (
+                    self._resolve_expression(key_path=group, data=host)
+                    is not None
+                ):
                     # The 'tags' field is a list, a second iteration must be
                     # performed at a deeper level
                     if group == 'tags':
@@ -487,9 +501,11 @@ class InventoryBuilder:
                                 inventory=inventory
                             )
                     else:
-                        # Check that the specified group points towards an actual
-                        # value
-                        group_name = self._resolve_expression(key_path=group, data=host)
+                        # Check that the specified group points towards an
+                        # actual value
+                        group_name = self._resolve_expression(
+                            key_path=group, data=host
+                        )
                         # Add the optional prefix
                         if group_prefix:
                             group_name = group_prefix + group_name
@@ -499,8 +515,8 @@ class InventoryBuilder:
                             group_name=group_name,
                             inventory=inventory
                         )
-        # Anyway, add the host to its main type group ( evices, racks, etc.) and to the
-        # group 'all'
+        # Anyway, add the host to its main type group ( evices, racks, etc.)
+        # and to the group 'all'
         self._add_element_to_group(
             element_name=element_name, group_name=obj_type, inventory=inventory
         )
@@ -546,7 +562,8 @@ class InventoryBuilder:
         inventory[group_name].setdefault('hosts', [])
         return inventory
 
-    def _load_element_vars(self, element_name, host, inventory, host_vars=None):
+    def _load_element_vars(self, element_name, host,
+                           inventory, host_vars=None):
         # If there is no required host var to load, end here.
         if host_vars:
             host_data = {}
@@ -582,8 +599,9 @@ class InventoryBuilder:
         Returns:
             The target value
         """
-        t = Transformer(data = data)
+        t = Transformer(data=data)
         return t.transform(self.parser.parse(key_path))
+
 
 def dump_json_inventory(inventory):
     """Dumps the given inventory in json

@@ -127,7 +127,7 @@ The resulting value will be the primary IP of the current host, suffixed with CI
 If you want to remove the subnet mask, you can use the 'sub' filter which shall remove the given regex in the way
 re.sub python function does (it is actually executed with this function).
 ```
-primary_ip.address | sub("/[0-9]{2}", "")
+primary_ip.address | sub("/[0-9]+", "")
 ```
 
 ## Usage
