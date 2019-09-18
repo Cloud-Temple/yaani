@@ -85,6 +85,8 @@ Key path can also be specified instead of simple Netbox key name.
 
 A special 'ALL' keyword is provided in order to load the entire piece of information from Netbox.
 
+In case a host has no name in Netbox, it is named after its Netbox ID, prefixed by its object type.
+
 #### Example
 ```
 
@@ -102,10 +104,30 @@ import:
 When specifying a key from Netbox in group_by or host_vars sections, a simple key name can be used. The value of that key in Netbox is used.
 It is also possible to specify a key path to point to keys inside nested dictionnaries. The key path is a string containing key names separated by dots.
 
+In order to apply transformations to the value obtained after key path resolution, some additional builtin filters may
+be applied.
+
+The supported builtin are the following :
+  - sub: it is used in the same way as the python function 'sub' from the re module. Indeed, it is executed by
+    this very function.
+  - key_path: Takes one argument as a key path which value must be returned if the preceding expression value is None.
+
 #### Example
 To point to key 'label' inside the dict a the 'status' key, you can use the following key path :
 ```
 status.label
+```
+
+To point to an ip address, you can use :
+```
+primary_ip.address
+```
+The resulting value will be the primary IP of the current host, suffixed with CIDR notation SNM.
+
+If you want to remove the subnet mask, you can use the 'sub' filter which shall remove the given regex in the way
+re.sub python function does (it is actually executed with this function).
+```
+primary_ip.address | sub("/[0-9]+", "")
 ```
 
 ## Usage

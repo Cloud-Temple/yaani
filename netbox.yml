@@ -37,8 +37,10 @@ netbox:
         # The key is the name of the variable in the inventory. The value is the name of the key where to find the information
         # in the output returned by Netbox.
         # Example:
+        ansible_host: primary_ip.address | sub("/[0-9]+", "") | default_key(name)
         rack_name: rack.name
-        ip: primary_ip.address
+        ip_with_cidr: primary_ip.address
+        ip_without_cidr: primary_ip.address | sub("/[0-9]+", "")
 
         # The 'ALL' keyword as a value loads the entire dict returned by Netbox
         # example:
