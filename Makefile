@@ -11,7 +11,7 @@ install:
 	pip install -r requirements.txt
 
 test:
-	pytest ${BASE_TEST_DIR} -s
+	pytest ${BASE_TEST_DIR}
 
 # test:
 # 	pytest ${TEST_DIRS} -s
