@@ -15,6 +15,8 @@ except ImportError:
 from lark import Lark, Transformer
 import re
 
+from jsonschema import validate
+
 # The name of the Environment variable where to find the path towards the
 # configuration file
 DEFAULT_ENV_CONFIG_FILE = "NETBOX_CONFIG_FILE"
@@ -62,154 +64,6 @@ class Transformer(Transformer):
             return n[1]
         else:
             return n[0]
-
-
-def safe_url(url):
-    """Return the given URL string making sure it ends with a slash
-
-    Args:
-        url (str): The URL
-
-    Returns:
-        TYPE: The URL ending with a trailing slash
-    """
-    if url and url[-1] != '/':
-        return url + '/'
-    else:
-        return url
-
-
-def parse_cli_args(script_args):
-    """Declare and configure script argument parser
-
-    Args:
-            script_args (list): The list of script arguments
-
-    Returns:
-            obj: The parsed arguments in an object. See argparse documention
-                 (https://docs.python.org/3.7/library/argparse.html)
-                 for more information.
-    """
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '-c', '--config-file',
-        default=os.getenv(DEFAULT_ENV_CONFIG_FILE, "netbox.yml"),
-        help="""Path for script's configuration file. If None is specified,
-                default value is %s environment variable or netbox.yml in the
-                current dir.""" % DEFAULT_ENV_CONFIG_FILE
-    )
-    parser.add_argument(
-        '--list', action='store_true',
-        help="""Print the entire inventory with hostvars respecting
-                the Ansible dynamic inventory syntax."""
-    )
-    parser.add_argument(
-        '--host', action='store',
-        help="""Print specific host vars as Ansible dynamic
-                inventory syntax."""
-    )
-
-    # Parse script arguments and return the result
-    return parser.parse_args(script_args)
-
-
-def validate_key_path(key_path):
-    """Return true if the given key_path syntax is valid.
-
-    Args:
-            key_path (str): The key-path
-
-    Returns:
-            Bool: True if the key-path syntax is ok. False else
-    """
-    key_list = key_path.split(".")
-    for key in key_list:
-        if key == "":
-            return False
-    return True
-
-
-def raise_for_configuration_errors(configuration):
-    """Validate the configuration structure. If no error is found, nothing
-    happens.
-
-    Args:
-            configuration (dict): The parsed configuration
-    """
-    def check_mandatory_key(key_name, data_dict):
-        """Trigger a sys.exit if the specified key name is not in the given
-        dict.
-
-        Args:
-            key_name (str): The key name
-            data_dict (dict): The dict in which the search must occur
-        """
-        main_key_error = (
-            "Error: The main key '%s' is not present"
-            " in the configuration file."
-        )
-        if key_name not in list(data_dict.keys()):
-            sys.exit(main_key_error % key_name)
-
-    # Allowed import types declaration
-    import_types = ['devices', 'racks', 'sites']
-
-    # Error messages declaration
-    key_path_error = (
-        "Error: The main key '%s' is not present"
-        " in the configuration file."
-    )
-
-    check_mandatory_key('netbox', configuration)
-    root = configuration['netbox']
-
-    # Check that main sections exist
-    check_mandatory_key('api', root)
-
-    # Ensure the mandatory key 'api_url' is set
-    check_mandatory_key('api_url', root['api'])
-
-    # Check values of import section
-    root = root.get('import', None)
-    if root:
-        for key, import_statement in root.items():
-            # Make sure the import type value is supported
-            if key not in import_types:
-                sys.exit("Error: The import type %s is not supported." % key)
-            try:
-                # Validate the group-by syntax
-                for prop in import_statement.get('group_by'):
-                    if not validate_key_path(prop):
-                        sys.exit(key_path_error % prop)
-            except KeyError:
-                continue
-            except TypeError:
-                continue
-
-
-def load_config_file(config_file_path):
-    """ Load the configuration file and returns its parsed content.
-
-    Args:
-            config_file_path (str): The path towards the configuration file
-    """
-    try:
-        with open(config_file_path, 'r') as file:
-            try:
-                parsed_config = yaml.safe_load(file)
-            except yaml.YAMLError as yaml_error:
-                # Handle Yaml level exceptions
-                sys.exit("Error: Unable to parse configuration file: %s" %
-                         yaml_error)
-    except IOError as io_error:
-        # Handle file level exception
-        sys.exit("Error: Cannot open configuration file.\n%s" % io_error)
-
-    # If syntax of configuration file is valid, nothing happens
-    # Beware, syntax can be valid while semantic is not
-    raise_for_configuration_errors(parsed_config)
-
-    return parsed_config
 
 
 class InventoryBuilder:
@@ -601,6 +455,183 @@ class InventoryBuilder:
         """
         t = Transformer(data=data)
         return t.transform(self.parser.parse(key_path))
+
+
+def safe_url(url):
+    """Return the given URL string making sure it ends with a slash
+
+    Args:
+        url (str): The URL
+
+    Returns:
+        TYPE: The URL ending with a trailing slash
+    """
+    if url and url[-1] != '/' or len(url) == 0:
+        return url + '/'
+    else:
+        return url
+
+
+def parse_cli_args(script_args):
+    """Declare and configure script argument parser
+
+    Args:
+            script_args (list): The list of script arguments
+
+    Returns:
+            obj: The parsed arguments in an object. See argparse documention
+                 (https://docs.python.org/3.7/library/argparse.html)
+                 for more information.
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '-c', '--config-file',
+        default=os.getenv(DEFAULT_ENV_CONFIG_FILE, "netbox.yml"),
+        help="""Path for script's configuration file. If None is specified,
+                default value is %s environment variable or netbox.yml in the
+                current dir.""" % DEFAULT_ENV_CONFIG_FILE
+    )
+    parser.add_argument(
+        '--list', action='store_true',
+        help="""Print the entire inventory with hostvars respecting
+                the Ansible dynamic inventory syntax."""
+    )
+    parser.add_argument(
+        '--host', action='store',
+        help="""Print specific host vars as Ansible dynamic
+                inventory syntax."""
+    )
+
+    # Parse script arguments and return the result
+    return parser.parse_args(script_args)
+
+
+def validate_configuration(configuration):
+    """Validate the configuration structure. If no error is found, nothing
+    happens.
+
+    Args:
+            configuration (dict): The parsed configuration
+    """
+
+    config_schema = {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "http://example.com/product.schema.json",
+        "title": "Configuration file",
+        "description": "The configuration file of the dynamic inventory",
+        "type": "object",
+        "properties": {
+            "netbox": {
+                "type": "object",
+                "description": "The base key of the configuration file",
+                "properties": {
+                    "api": {
+                        "type": "object",
+                        "description": (
+                            "The section holding information used "
+                            "to connect to netbox api"
+                        ),
+                        "additionalProperties": False,
+                        "properties": {
+                            "api_url": {
+                                "type": "string",
+                                "description": "The url of netbox api"
+                            },
+                            "api_token": {
+                                "type": "string",
+                                "description": "The netbox token to use"
+                            }
+                        },
+                        "required": ["api_url"]
+                    },
+                    "import": {
+                        "type": "object",
+                        "description": "The import section",
+                        "minProperties": 1,
+                        "additionalProperties": False,
+                        "patternProperties": {
+                            "^": {
+                                "type": "object",
+                                "minProperties": 1,
+                                "description": (
+                                    "An import statement describing which "
+                                    "objects must be fetched from netbox "
+                                    "whith which modalities."
+                                ),
+                                "additionalProperties": False,
+                                "properties": {
+                                    "group_by": {
+                                        "type": "array",
+                                        "description": (
+                                            "The group_by section specifies "
+                                            "the values to be used to group "
+                                            "objects."
+                                        ),
+                                        "minItems": 1,
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "group_prefix": {
+                                        "type": "string",
+                                        "description": (
+                                            "A short string to append in front"
+                                            " of group names in this import "
+                                            "statement."
+                                        )
+                                    },
+                                    "filter": {
+                                        "type": "string",
+                                        "description": (
+                                            "A filter passed to netbox url "
+                                            "at cURL time."
+                                        )
+                                    },
+                                    "host_vars": {
+                                        "type": "object",
+                                        "description": (
+                                            "The name of the vars to load "
+                                            "in association to the current "
+                                            "host."
+                                        ),
+                                        "minProperties": 1
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "required": ["api"]
+            }
+        },
+        "required": ["netbox"]
+    }
+
+    return validate(instance=configuration, schema=config_schema)
+
+
+def load_config_file(config_file_path):
+    """ Load the configuration file and returns its parsed content.
+
+    Args:
+            config_file_path (str): The path towards the configuration file
+    """
+    try:
+        with open(config_file_path, 'r') as file:
+            parsed_config = yaml.safe_load(file)
+    except IOError as io_error:
+        # Handle file level exception
+        sys.exit("Error: Cannot open configuration file.\n%s" % io_error)
+    except yaml.YAMLError as yaml_error:
+        # Handle Yaml level exceptions
+        sys.exit("Error: Unable to parse configuration file: %s" %
+                 yaml_error)
+
+    # If syntax of configuration file is valid, nothing happens
+    # Beware, syntax can be valid while semantic is not
+    validate_configuration(parsed_config)
+
+    return parsed_config
 
 
 def dump_json_inventory(inventory):
