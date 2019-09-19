@@ -2,6 +2,35 @@
 
 Yaani stands for Yet Another Ansible Netbox Inventory. It is a dynamic inventory script sourcing information from Netbox to make it available in Ansible.
 
+## Requirements
+
+All the requirements are listed in the requirements.txt file.
+
+## Installation
+
+In order to install the dependencies, simply run the following command in the root folder:
+```
+make install
+```
+This requires to have the make package installed.
+
+In case it is not installed, run :
+```
+pip install -r requirements.txt
+```
+
+## Tests
+
+A test suite is available in the tests forlder. To run the test suite, you must have pytest installed.
+Run the following command if you make installed :
+```
+make test
+```
+ If it is not the case, run :
+```
+pytest
+```
+
 ## Principles
 
 ### General
