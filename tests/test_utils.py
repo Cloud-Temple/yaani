@@ -264,4 +264,3 @@ def test_validate_configuration_ok(arg):
 def test_validate_configuration_ko(arg):
     with pytest.raises(Exception) as err:
         validate_configuration(arg)
-    print(str(err))
