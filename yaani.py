@@ -221,6 +221,7 @@ class InventoryBuilder:
             "devices": "dcim/devices/",
             "racks": "dcim/racks/",
             "sites": "dcim/sites/",
+            "vm": "virtualization/virtual-machines/",
         }
 
         # Ensure the import type is known and supported

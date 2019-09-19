@@ -92,7 +92,7 @@ Example
 
 import:
   devices:
-	filter: "role_id=1&name=X"
+    filter: "role_id=1&name=X"
 ```
 
 ### Host vars
@@ -123,9 +123,9 @@ In case a host has no name in Netbox, it is named after its Netbox ID, prefixed 
 import:
   devices:
     host_vars:
-	  # make all information from Netbox available in the variable 'main'
-	  main: ALL
-	  ...
+    # make all information from Netbox available in the variable 'main'
+    main: ALL
+    ...
 ```
 
 ### Key path
@@ -139,7 +139,7 @@ be applied.
 The supported builtin are the following :
   - sub: it is used in the same way as the python function 'sub' from the re module. Indeed, it is executed by
     this very function.
-  - key_path: Takes one argument as a key path which value must be returned if the preceding expression value is None.
+  - default_key: Takes one argument as a key path which value must be returned if the preceding expression value is None.
 
 #### Example
 To point to key 'label' inside the dict a the 'status' key, you can use the following key path :
@@ -199,6 +199,7 @@ netbox:
         - tags
       host_vars:
         primary_ip: primary_ip.address
+        ansible_host: primary_ip.address | sub("/[0-9]+", "")
 
     racks:
       host_vars:
