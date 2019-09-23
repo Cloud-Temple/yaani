@@ -209,6 +209,7 @@ netbox:
 ## Authors
 
 * **Antoine Delannoy** - *Initial work* - [a-delannoy](https://github.com/a-delannoy)
+* **Antoine Trevel** - *Test PR* - [AntoineTre](https://github.com/AntoineTre)
 
 ## Acknowledgments
 
