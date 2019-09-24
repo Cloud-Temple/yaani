@@ -16,7 +16,7 @@ This requires to have the make package installed.
 
 In case it is not installed, run :
 ```
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 ```
 
 ## Tests
@@ -65,10 +65,11 @@ Example
 
 ...
 import:
-  devices:
-    group_by:
-      - key1
-      - key2
+  dcim:
+    devices:
+      group_by:
+        - key1
+        - key2
 ...
 ```
 
@@ -91,8 +92,9 @@ The filter statement allows one to filter elements requested to Netbox API. It n
 Example
 
 import:
-  devices:
-    filter: "role_id=1&name=X"
+  dcim:
+    devices:
+      filters: "role_id=1&name=X"
 ```
 
 ### Host vars
@@ -103,10 +105,11 @@ Hostvars for hosts can be loaded from Netbox using the 'host_vars' statement in 
 ```
 ...
 import:
-  devices:
-    host_vars:
-      # Load the value of primary_ip and make it accessible in the 'host_ip' variable.
-      host_ip: primary_ip
+  dcim:
+    devices:
+      host_vars:
+        # Load the value of primary_ip and make it accessible in the 'host_ip' variable.
+        host_ip: primary_ip
 ...
 ```
 
@@ -121,10 +124,11 @@ In case a host has no name in Netbox, it is named after its Netbox ID, prefixed 
 
 ...
 import:
-  devices:
-    host_vars:
-    # make all information from Netbox available in the variable 'main'
-    main: ALL
+  dcim:
+    devices:
+      host_vars:
+      # make all information from Netbox available in the variable 'main'
+      main: ALL
     ...
 ```
 
@@ -192,18 +196,20 @@ netbox:
     # api_token: "<Netbox token>"
 
   import:
-    devices:
-      filter: "role_id=<id of the role in Netbox>"
-      group_by:
-        - rack.name
-        - tags
-      host_vars:
-        primary_ip: primary_ip.address
-        ansible_host: primary_ip.address | sub("/[0-9]+", "")
+    dcim:
+      devices:
+        filters:
+          role_id: <device_role id>
+        group_by:
+          - rack.name
+          - tags
+        host_vars:
+          primary_ip: primary_ip.address
+          ansible_host: primary_ip.address | sub("/[0-9]+", "")
 
-    racks:
-      host_vars:
-        rack_main: ALL
+      racks:
+        host_vars:
+          rack_main: ALL
 ```
 
 ## Authors
