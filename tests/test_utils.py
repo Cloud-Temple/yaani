@@ -1,17 +1,6 @@
 import pytest
 
-from yaani import safe_url, parse_cli_args, validate_configuration
-
-
-@pytest.mark.parametrize("arg,exp", [
-    ("test/", "test/"),  # already correct url
-    ("test", "test/"),  # missing slash
-    ("test//", "test//"),  # double slash
-    ("/", "/"),  # one char
-    ("", "/"),  # empty string
-])
-def test_safe_url(arg, exp):
-    assert safe_url(arg) == exp
+from yaani import parse_cli_args, validate_configuration
 
 
 @pytest.mark.parametrize("args,exp", [
@@ -61,15 +50,39 @@ def test_parse_cli_args_ko(args):
     ({  # only api section with only url
         "netbox": {
             "api": {
-                "api_url": "http://test.com"
+                "url": "http://test.com"
+            }
+        }
+    }),
+    ({  # only api section with url and private key
+        "netbox": {
+            "api": {
+                "url": "http://test.com",
+                "private_key": "private key"
+            }
+        }
+    }),
+    ({  # only api section with url and private key file
+        "netbox": {
+            "api": {
+                "url": "http://test.com",
+                "private_key_file": "private key"
+            }
+        }
+    }),
+    ({  # only api section with url and ssl verify
+        "netbox": {
+            "api": {
+                "url": "http://test.com",
+                "ssl_verify": True
             }
         }
     }),
     ({  # only api section with url and token
         "netbox": {
             "api": {
-                "api_url": "http://test.com",
-                "api_token": "Test_token"
+                "url": "http://test.com",
+                "token": "Test_token"
             }
         }
     }),
@@ -77,23 +90,29 @@ def test_parse_cli_args_ko(args):
         # options
         "netbox": {
             "api": {
-                "api_url": "http://test.com",
-                "api_token": "token_test"
+                "url": "http://test.com",
+                "token": "token_test"
             },
             "import": {
-                "devices": {
-                    "filter": "test_filter",
-                    "group_by": [
-                        "device_role",
-                        "tags"
-                    ],
-                    "group_prefix": "dev_",
-                    "host_vars": {
-                        "ip": "ip"
+                "dcim": {
+                    "devices": {
+                        "filters": {
+                            "role_id": 3
+                        },
+                        "group_by": [
+                            "device_role",
+                            "tags"
+                        ],
+                        "group_prefix": "dev_",
+                        "host_vars": {
+                            "ip": "ip"
+                        }
+                    },
+                    "racks": {
+                        "filters": {
+                            "role_id": 4
+                        }
                     }
-                },
-                "racks": {
-                    "filter": "test"
                 }
             }
         }
@@ -116,24 +135,33 @@ def test_validate_configuration_ok(arg):
     ({
         "netbox": {
             "api": {
-                "api_url": "http://test.com",
+                "url": "http://test.com",
                 "extra": True  # extra key
             }
         }
     }),
-    ({
+    ({  # both private key and private key file
         "netbox": {
             "api": {
-                "api_url": 1,  # bad type
-                "api_token": {}  # bad type
+                "url": "http://test.com",
+                "private_key": "private key",
+                "private_key_file": "private key file"
             }
         }
     }),
     ({
         "netbox": {
             "api": {
-                "api_url": "http://test.com",
-                "api_token": "token_test"
+                "url": 1,  # bad type
+                "token": {}  # bad type
+            }
+        }
+    }),
+    ({
+        "netbox": {
+            "api": {
+                "url": "http://test.com",
+                "token": "token_test"
             },
             "import": "string"  # bad type
         }
@@ -141,8 +169,8 @@ def test_validate_configuration_ok(arg):
     ({
         "netbox": {
             "api": {
-                "api_url": "http://test.com",
-                "api_token": "token_test"
+                "url": "http://test.com",
+                "token": "token_test"
             },
             "import": {}  # empty import section
         }
@@ -150,8 +178,8 @@ def test_validate_configuration_ok(arg):
     ({
         "netbox": {
             "api": {
-                "api_url": "http://test.com",
-                "api_token": "token_test"
+                "url": "http://test.com",
+                "token": "token_test"
             },
             "import": {
                 "devices": {
@@ -163,37 +191,54 @@ def test_validate_configuration_ok(arg):
     ({
         "netbox": {
             "api": {
-                "api_url": "http://test.com",
-                "api_token": "token_test"
+                "url": "http://test.com",
+                "token": "token_test"
             },
             "import": {
-                "devices": {
-                    "host_vars": {}  # empty host_vars
+                "dcim": {
+                    "devices": {
+                        "host_vars": {}  # empty host_vars
+                    }
                 }
             }
         },
     }),
+    ({
+        "netbox": {
+            "api": {
+                "url": "http://test.com",
+                "token": "token_test"
+            },
+            "import": {
+                "dcim": {}  # empty app name
+            }
+        }
+    }),
     ({  # full api section and import section containing devices with all
         # options
         "netbox": {
             "api": {
-                "api_url": "http://test.com",
-                "api_token": "token_test"
+                "url": "http://test.com",
+                "token": "token_test"
             },
             "import": {
-                "devices": {
-                    "filter": "test_filter",
-                    "group_by": [
-                        "device_role",
-                        "tags"
-                    ],
-                    "group_prefix": "dev_",
-                    "host_vars": {
-                        "ip": "ip"
+                "dcim": {
+                    "devices": {
+                        "filters": {
+                            "example": "example value"
+                        },
+                        "group_by": [
+                            "device_role",
+                            "tags"
+                        ],
+                        "group_prefix": "dev_",
+                        "host_vars": {
+                            "ip": "ip"
+                        }
+                    },
+                    "racks": {
+                        "group_by": []  # empty group by
                     }
-                },
-                "racks": {
-                    "group_by": []  # empty group by
                 }
             }
         }
@@ -202,23 +247,27 @@ def test_validate_configuration_ok(arg):
         # options
         "netbox": {
             "api": {
-                "api_url": "http://test.com",
-                "api_token": "token_test"
+                "url": "http://test.com",
+                "token": "token_test"
             },
             "import": {
-                "devices": {
-                    "filter": "test_filter",
-                    "group_by": [
-                        "device_role",
-                        "tags"
-                    ],
-                    "group_prefix": "dev_",
-                    "host_vars": {
-                        "ip": "ip"
+                "dcim": {
+                    "devices": {
+                        "filters": {
+                            "example": "example value"
+                        },
+                        "group_by": [
+                            "device_role",
+                            "tags"
+                        ],
+                        "group_prefix": "dev_",
+                        "host_vars": {
+                            "ip": "ip"
+                        }
+                    },
+                    "racks": {
+                        "filters": 1  # bad type on patter arg
                     }
-                },
-                "racks": {
-                    "filter": 1  # bad type on patter arg
                 }
             }
         }
@@ -227,23 +276,27 @@ def test_validate_configuration_ok(arg):
         # options
         "netbox": {
             "api": {
-                "api_url": "http://test.com",
-                "api_token": "token_test"
+                "url": "http://test.com",
+                "token": "token_test"
             },
             "import": {
-                "devices": {
-                    "filter": "test_filter",
-                    "group_by": [
-                        "device_role",
-                        "tags"
-                    ],
-                    "group_prefix": "dev_",
-                    "host_vars": {
-                        "ip": "ip"
+                "dcim": {
+                    "devices": {
+                        "filters": {
+                            "example": "example value"
+                        },
+                        "group_by": [
+                            "device_role",
+                            "tags"
+                        ],
+                        "group_prefix": "dev_",
+                        "host_vars": {
+                            "ip": "ip"
+                        }
+                    },
+                    "racks": {
+                        "extra": "test"  # extra arg
                     }
-                },
-                "racks": {
-                    "extra": "test"  # extra arg
                 }
             }
         }
@@ -252,11 +305,11 @@ def test_validate_configuration_ok(arg):
         # options
         "netbox": {
             "api": {
-                "api_url": "http://test.com",
-                "api_token": "token_test"
+                "url": "http://test.com",
+                "token": "token_test"
             },
             "import": {
-                "devices": {}  # empty section
+                "dcim": {}  # empty section
             }
         }
     }),
