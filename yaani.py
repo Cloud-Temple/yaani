@@ -210,7 +210,7 @@ class InventoryBuilder:
                 inventory=inventory
             )
 
-            return inventory['_meta']['hostvars'][self.host]
+            return inventory['_meta']['hostvars'].get(self.host, {})
         #  If none of the list or host options is set, return an empty dict
         else:
             return {}
@@ -367,7 +367,10 @@ class InventoryBuilder:
 
         # specific host handling
         if specific_host is not None:
-            result = [endpoint.get(name=specific_host)]
+            result = []
+            h = endpoint.get(name=specific_host)
+            if h:
+                result.append(h)
         elif filters is not None:
             result = endpoint.filter(**filters)
         else:
