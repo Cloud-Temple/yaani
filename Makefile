@@ -8,7 +8,7 @@ BASE_TEST_DIR=tests/
 .PHONY: test
 
 install:
-	pip install -r requirements.txt
+	pip3 install -r requirements.txt
 
 test:
 	pytest ${BASE_TEST_DIR}

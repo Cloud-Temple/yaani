@@ -1,58 +1,73 @@
 netbox:
   api:
-    # API section to specify url and token
+    # API section to specify api configuration
+    # All the following keys are directly provided to pynetbox for netbox api connection purposes.
+    # (see https://pynetbox.readthedocs.io/en/latest/index.html for more information)
 
     # This key is mandatory
-    api_url: "<Netbox api url>"
-    # api_token is optionnal
-    # api_token: "<Netbox token>"
+    url: "http://netbox.example.lan/"
+
+    # The followings are optional
+    # token: "<Netbox token>"
+
+    # Private key and private key file are mutually exclusive parameters
+    # private_key: "<Your private key>"
+    # private_key_file: "<Your private key file>"
+
+    # ssl_verify: True
 
   import:
-    # Import section indicates what elements to add in the inventory, how to group them
-    # and allows filtering features.
-    # 'import' section is optionnal and must be used only if some grouping, filtering or var loading feature is needed.
-    # If present, this section must contain at least one section amongst the following : devices, racks, sites...
+    # The 'import' section indicates which elements must be provided in the inventory, how to group them, and use filtering and variables loading features.
+    # The 'import' section is optional and must be used only if some grouping, filtering or var loading feature is needed.
+    # If present, this section must contain at least one section amongst the following : dcim, virtualization... (netbox applications)
+    # 'dcim' for example is an application name from netbox where we can find devices, racks, etc.
+    dcim:
+      devices:
+        # The 'device' section configures import from Netbox on device objects. This section is called an 'import statement' of type 'device'.
+        # All import statements, in whatever application, are structured in the same way.
 
-    devices:
-      # the 'device' section configures import from Netbox on device objects.
+        # The 'filters' value is passed when requesting Netbox via pynetbox. It allows to narrow the fetch from netbox.
+        # This field is optional.
+        filters:
+          role_id: 4
 
-      # The filter value is passed when requesting Netbox. It allows to narrow the fetch from netbox.
-      # This field is optionnal
-      # filter: "role_id=...&rack_id=..."
+        # The 'group_by' field is an optional field. It expects a list and is used to configure the grouping feature.
+        # The expected values are keys or compositions of keys appended to each others with dots and possibly filtered (see the README).
+        # This allows the user to use keys in nested dicts which values must be used for groups creation. The values must be single value, not lists or dicts.
+        # The keys must be present in Netbox objects.
+        group_by:
+          # - device_role.name
+          # - rack.name
+          # The tags keyword is special as it will create a group by tag and place an host in each of its corresponding groups.
+          - tags
 
-      # 'group_by' is an optionnal field. It expects a list and is used to configure the grouping feature.
-      # The expected values are keys or compositions of keys appended to each others with dots. This allow to specify vars in nested dicts.
-      # The keys must be present in Netbox objects.
-      group_by:
-        # - device_role.name
-        # - rack.name
-        - tags
+        # The 'group_prefix' is an optional field. If the group_by statement is used, this will prefix every group name created for the current import statement
+        # with the given prefix. This is used to avoid colliding group names for different types of element.
+        # Example: With the following, every device group will be prefixed with the 'dev_' particle.
+        group_prefix: 'dev_'
 
-      # Optionnal field. If the group_by statement is used, this will prefix every group name created for the current import statement
-      # with the given prefix. This is used to avoid colliding group names for different types of element.
-      group_prefix: 'dev_'
+        # The 'host_vars' field is optional. It configures which variable form Netbox to load as hostvars in the inventory.
+        host_vars:
+          # The key is the name of the variable in the inventory. The value is the name of the key where to find the information
+          # in the output returned by Netbox.
+          # Example:
+          rack_name: rack.name
 
-      # The host_vars field is optionnal. It configures which variable form Netbox to load as hostvars in the inventory.
-      host_vars:
-        # The key is the name of the variable in the inventory. The value is the name of the key where to find the information
-        # in the output returned by Netbox.
-        # Example:
-        ansible_host: primary_ip.address | sub("/[0-9]+", "") | default_key(name)
-        rack_name: rack.name
-        ip_with_cidr: primary_ip.address
-        ip_without_cidr: primary_ip.address | sub("/[0-9]+", "")
+          # The 'sub' builtin is provided to transform the resulting value in the same way the python re.sub function does.
+          # Example: In order to remove the CIDR notation of a subnet mask from an IP in netbox :
+          ip_without_cidr: primary_ip.address | sub("/[0-9]+", "")
+          # The 'default_key' builtin is provided to use a fallback key if the current value is None.
+          ansible_host: primary_ip.address | sub("/[0-9]+", "") | default_key(name)
+          ip_with_cidr: primary_ip.address
 
-        # The 'ALL' keyword as a value loads the entire dict returned by Netbox
-        # example:
-        # main: ALL
-        #   If used this way, the 'main' key in the hostvars will contain all information for a host in Netbox
+          # The 'ALL' keyword as a value loads the entire dict returned by Netbox
+          # example:
+          # main: ALL
+          #   If used this way, the 'main' key in the hostvars will contain all information for a host in Netbox
 
-        # The values of this section have the same properties as the 'group_by' values, compositions of keys are accepted.
-        # status_name: status.label
-        # rack: rack.name
-
-    # racks:
-    #   host_vars:
-    #     id: id
-    # filter: "role_id=3"
+      # racks:
+      #   host_vars:
+      #     id: id
+      # filters:
+      #  role_id: 3
 
