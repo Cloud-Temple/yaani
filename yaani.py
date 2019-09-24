@@ -5,7 +5,6 @@ from __future__ import absolute_import
 import argparse
 import sys
 import os
-import requests
 import yaml
 try:
     import json
@@ -16,6 +15,7 @@ from lark import Lark, Transformer
 import re
 
 from jsonschema import validate
+import pynetbox
 
 # The name of the Environment variable where to find the path towards the
 # configuration file
@@ -70,14 +70,14 @@ class InventoryBuilder:
     """Inventory Builder is the object that builds and return the inventory.
 
     Attributes:
-        api_token (str): The token to use with Netbox
-        api_url (str): The Netbox API URL
+        config_api (dict): The configuration of the api section
         config_data (dict): The configuration parsed from the configuration
                             file
         config_file (str): The path of thge configuration file
         host (str): The hostname if specified, None else
         imports (list): The list of import statements in the configuration file
         list_mode (bool): The value of --list option
+        parser (Lark): The parser used to parse custom expressions.
     """
 
     def __init__(self, script_args, script_config):
@@ -88,9 +88,9 @@ class InventoryBuilder:
 
         # Configuration file
         self.config_data = script_config['netbox']
-        self.api_url = safe_url(self.config_data['api'].get('api_url', None))
-        self.api_token = self.config_data['api'].get('api_token', None)
+        self.config_api = self.config_data['api']
         self.imports = self.config_data.get('import', None)
+        # Expression resolutions objects
         grammar = """
             expr: sub
                 | default_key
@@ -170,17 +170,20 @@ class InventoryBuilder:
             # If it exists, iterate over each statement, else, execute default
             # behaviour.
             if self.imports:
-                # Iterate through each import element and resolve it
-                for type_key, import_statement in self.imports.items():
-                    self._execute_import(
-                        import_type=type_key,
-                        import_options=import_statement,
-                        inventory=inventory
-                    )
+                # For each application, iterate over all inner object types
+                for app_name, app_import in list(self.imports.items()):
+                    for type_key, import_statement in app_import.items():
+                        self._execute_import(
+                            application=app_name,
+                            import_type=type_key,
+                            import_options=import_statement,
+                            inventory=inventory
+                        )
             else:
                 # Execute default behaviour:
                 #   -> get all devices and handle no grouping option
                 self._execute_import(
+                    application='dcim',
                     import_type='devices',
                     import_options={},
                     inventory=inventory
@@ -194,9 +197,14 @@ class InventoryBuilder:
 
             # A host is considered to be a device. Check if devices import
             # options are set.
-            device_import_options = self.imports.get('devices', {})
+            device_import_options = (
+                self.imports
+                .get('dcim', {})
+                .get('devices', {})
+            )
 
             self._execute_import(
+                application='dcim',
                 import_type='devices',
                 import_options=device_import_options,
                 inventory=inventory
@@ -207,39 +215,22 @@ class InventoryBuilder:
         else:
             return {}
 
-    def _execute_import(self, import_type, import_options, inventory):
+    def _execute_import(self, application, import_type,
+                        import_options, inventory):
         """Fetch requested entities in Netbox.
 
         Args:
+            application (str): The name of the netbox application.
+                example: dcim, virtualization, etc.
             import_type (str): The type of objects to fetch from Netbox.
             import_options (str): The complementary arguments to refine search.
             inventory (dict): The inventory in which the information must be
                 added.
         """
-        # Declare the dict referencing all supported import statement types
-        import_types_endpoints = {
-            "devices": "dcim/devices/",
-            "racks": "dcim/racks/",
-            "sites": "dcim/sites/",
-            "vm": "virtualization/virtual-machines/",
-        }
-
-        # Ensure the import type is known and supported
-        try:
-            endpoint = import_types_endpoints[import_type]
-        except KeyError:
-            # If the specified import type is not supported, end program
-            # execution.
-            sys.exit(
-                "Error: %s type"
-                " is not supported under import section." % import_type
-            )
-
         # Fetch the list of entities from Netbox
         netbox_hosts_list = self._get_elements_list(
-            self.api_url + endpoint,
-            api_token=self.api_token,
-            cfilter=import_options.get('filter', None),
+            application, import_type,
+            filters=import_options.get('filters', None),
             specific_host=self.host
         )
 
@@ -248,75 +239,44 @@ class InventoryBuilder:
         if netbox_hosts_list:
             for host in netbox_hosts_list:
                 # Compute an id for the given host data
-                element_name = self._get_identifier(host, import_type)
+                element_name = self._get_identifier(dict(host), import_type)
                 # Add the element to the propper group(s)
                 self._add_element_to_inventory(
-                    element_name, host, inventory, import_type,
+                    element_name, dict(host), inventory, import_type,
                     import_options.get('group_by', None),
-                    import_options.get('group_prefix', None)
-                )
-                # Load the host vars in the inventory
-                self._load_element_vars(
-                    element_name, host,
-                    inventory,
+                    import_options.get('group_prefix', None),
                     import_options.get('host_vars', None)
                 )
 
-    def _get_elements_list(self, api_url, api_token=None,
-                           cfilter=None, specific_host=None):
-        """Retrieves a list of element from netbox API.
+    def _load_element_vars(self, element_name, host,
+                           inventory, host_vars=None):
+        # If there is no required host var to load, end here.
+        if host_vars:
+            host_data = {}
+            # Iterate over every key value pairs in host_vars required in
+            # config file
+            for key, value in host_vars.items():
+                # Set the name of the key
+                if value == 'ALL':
+                    host_data[key] = host
+                else:
+                    try:
+                        host_data[key] = self._resolve_expression(
+                            key_path=value,
+                            data=host
+                        )
+                    except KeyError:
+                        sys.exit("Error: Key '%s' not found" % value)
 
-        Returns:
-                A list of all elements from netbox API.
-        """
-
-        if not api_url:
-            sys.exit("Missing API URL in configuration file")
-
-        # cURL options
-        api_url_headers = {}
-        api_url_params = {}
-
-        # If a token is specified, take it into account.
-        if api_token:
-            # load token in headers
-            api_url_headers.update({"Authorization": "Token %s" % api_token})
-
-        # If a host name was specified, narrow search to one specific host.
-        if specific_host:
-            api_url_params.update({"name": specific_host})
-
-        # Resolve the filter
-        if cfilter:
-            filter_string = "?%s&limit=0" % cfilter
-        else:
-            filter_string = "?limit=0"
-
-        # Get hosts list without pagination
-        api_output = requests.get(
-            api_url + filter_string,
-            params=api_url_params,
-            headers=api_url_headers
-        )
-
-        # Check that a request is 200
-        api_output.raise_for_status()
-
-        # Get api output data.
-        try:
-            api_output_data = api_output.json()
-        except json.decoder.JSONDecodeError:
-            sys.exit(
-                "Error: Error while parsing output from netbox. "
-                "Possible mistake is you entered a URL "
-                "forgetting the /api/ suffix."
+            # Add the loaded variables in the inventory under the proper
+            # section (name of the host)
+            inventory['_meta']['hostvars'].update(
+                {element_name: host_data}
             )
 
-        # Get hosts list.
-        return api_output_data["results"]
-
     def _add_element_to_inventory(self, element_name, host, inventory,
-                                  obj_type, group_by=None, group_prefix=None):
+                                  obj_type, group_by=None, group_prefix=None,
+                                  host_vars=None):
         """Insert the given element in the propper groups.
 
         Args:
@@ -327,8 +287,8 @@ class InventoryBuilder:
             obj_type (str): The type of the element
             group_by (list, optional): The list of group ot create and to add
                 the element to.
-            group_prefix (str, optional): An optional prefix to add in front of
-                group names that will be created.
+            group_prefix (str, optional): An optional prefix to add in front
+                of group names that will be created.
         """
         # If the group_by option is specified, insert the element in the
         # propper groups.
@@ -379,6 +339,42 @@ class InventoryBuilder:
             element_name=element_name, group_name='all', inventory=inventory
         )
 
+        # Load the host vars in the inventory
+        self._load_element_vars(
+            element_name, host,
+            inventory,
+            host_vars
+        )
+
+    def _get_elements_list(self, application, object_type,
+                           filters=None, specific_host=None):
+        """Retrieves a list of element from netbox API.
+
+        Returns:
+            A list of all elements from netbox API.
+
+        Args:
+            application (str): The name of the netbox application
+            object_type (str): The type of object to import
+            filters (dict, optional): The filters to pass on to pynetbox calls
+            specific_host (str, optional): The name of a specific host which
+                host vars must be returned alone.
+        """
+        nb = pynetbox.api(**self.config_api)
+
+        app_obj = getattr(nb, application)
+        endpoint = getattr(app_obj, object_type)
+
+        # specific host handling
+        if specific_host is not None:
+            result = [endpoint.get(name=specific_host)]
+        elif filters is not None:
+            result = endpoint.filter(**filters)
+        else:
+            result = endpoint.all()
+
+        return result
+
     def _add_element_to_group(self, element_name, group_name, inventory):
         self._initialize_group(group_name=group_name, inventory=inventory)
         if element_name not in inventory.get(group_name).get('hosts'):
@@ -417,32 +413,6 @@ class InventoryBuilder:
         inventory[group_name].setdefault('hosts', [])
         return inventory
 
-    def _load_element_vars(self, element_name, host,
-                           inventory, host_vars=None):
-        # If there is no required host var to load, end here.
-        if host_vars:
-            host_data = {}
-            # Iterate over every key value pairs in host_vars required in
-            # config file
-            for key, value in host_vars.items():
-                # Set the name of the key
-                if value == 'ALL':
-                    host_data[key] = host
-                else:
-                    try:
-                        host_data[key] = self._resolve_expression(
-                            key_path=value,
-                            data=host
-                        )
-                    except KeyError:
-                        sys.exit("Error: Key '%s' not found" % value)
-
-            # Add the loaded variables in the inventory under the proper
-            # section (name of the host)
-            inventory['_meta']['hostvars'].update(
-                {element_name: host_data}
-            )
-
     def _resolve_expression(self, key_path, data):
         """Resolve the given key path to a value.
 
@@ -456,21 +426,6 @@ class InventoryBuilder:
         """
         t = Transformer(data=data)
         return t.transform(self.parser.parse(key_path))
-
-
-def safe_url(url):
-    """Return the given URL string making sure it ends with a slash
-
-    Args:
-        url (str): The URL
-
-    Returns:
-        TYPE: The URL ending with a trailing slash
-    """
-    if url and url[-1] != '/' or len(url) == 0:
-        return url + '/'
-    else:
-        return url
 
 
 def parse_cli_args(script_args):
@@ -493,12 +448,12 @@ def parse_cli_args(script_args):
                 current dir.""" % DEFAULT_ENV_CONFIG_FILE
     )
     parser.add_argument(
-        '--list', action='store_true',
+        '--list', action='store_true', default=False,
         help="""Print the entire inventory with hostvars respecting
                 the Ansible dynamic inventory syntax."""
     )
     parser.add_argument(
-        '--host', action='store',
+        '--host', action='store', default=None,
         help="""Print specific host vars as Ansible dynamic
                 inventory syntax."""
     )
@@ -534,68 +489,81 @@ def validate_configuration(configuration):
                         ),
                         "additionalProperties": False,
                         "properties": {
-                            "api_url": {
+                            "url": {
                                 "type": "string",
                                 "description": "The url of netbox api"
                             },
-                            "api_token": {
+                            "token": {
                                 "type": "string",
                                 "description": "The netbox token to use"
+                            },
+                            "private_key": {
+                                "type": "string",
+                                "description": "The private key"
+                            },
+                            "private_key_file": {
+                                "type": "string",
+                                "description": "The private key file"
+                            },
+                            "ssl_verify": {
+                                "type": "boolean",
+                                "description": (
+                                    "Specify SSL verification behavior"
+                                )
                             }
                         },
-                        "required": ["api_url"]
+                        "required": ["url"],
+                        "allOf": [
+                            {
+                                "not": {
+                                    "type": "object",
+                                    "required": [
+                                        "private_key",
+                                        "private_key_file"
+                                    ]
+                                }
+                            }
+                        ]
                     },
                     "import": {
                         "type": "object",
-                        "description": "The import section",
+                        "description": "The netbox application",
                         "minProperties": 1,
                         "additionalProperties": False,
                         "patternProperties": {
                             "^": {
                                 "type": "object",
+                                "description": "The import section",
                                 "minProperties": 1,
-                                "description": (
-                                    "An import statement describing which "
-                                    "objects must be fetched from netbox "
-                                    "whith which modalities."
-                                ),
                                 "additionalProperties": False,
-                                "properties": {
-                                    "group_by": {
-                                        "type": "array",
-                                        "description": (
-                                            "The group_by section specifies "
-                                            "the values to be used to group "
-                                            "objects."
-                                        ),
-                                        "minItems": 1,
-                                        "items": {
-                                            "type": "string"
-                                        }
-                                    },
-                                    "group_prefix": {
-                                        "type": "string",
-                                        "description": (
-                                            "A short string to append in front"
-                                            " of group names in this import "
-                                            "statement."
-                                        )
-                                    },
-                                    "filter": {
-                                        "type": "string",
-                                        "description": (
-                                            "A filter passed to netbox url "
-                                            "at cURL time."
-                                        )
-                                    },
-                                    "host_vars": {
+                                "patternProperties": {
+                                    "^": {
                                         "type": "object",
-                                        "description": (
-                                            "The name of the vars to load "
-                                            "in association to the current "
-                                            "host."
-                                        ),
-                                        "minProperties": 1
+                                        "minProperties": 1,
+                                        "additionalProperties": False,
+                                        "properties": {
+                                            "group_by": {
+                                                "type": "array",
+                                                "minItems": 1,
+                                                "items": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "group_prefix": {
+                                                "type": "string",
+                                            },
+                                            "filters": {
+                                                "type": "object",
+                                                "minProperties": 1,
+                                                "description": (
+                                                    ""
+                                                )
+                                            },
+                                            "host_vars": {
+                                                "type": "object",
+                                                "minProperties": 1
+                                            }
+                                        }
                                     }
                                 }
                             }
