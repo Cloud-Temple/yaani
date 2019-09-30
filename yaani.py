@@ -24,6 +24,7 @@ DEFAULT_ENV_CONFIG_FILE = "NETBOX_CONFIG_FILE"
 
 
 class Namespace:
+    # FIXME: Reconsider using only a dict as a namespace
     def __init__(self, name, key, vars_dict={}):
         self.vars = vars_dict.copy()
         self.name = name
@@ -52,6 +53,8 @@ class Namespace:
 
 
 class StackTransformer(Transformer):
+    # FIXME: Correct comments
+    # FIXME: Add comments
     def __init__(self, vars_definition, api_connector, import_namespace,
                  sub_import_namespace):
         self.api_connector = api_connector
@@ -127,6 +130,8 @@ class StackTransformer(Transformer):
 
 class KeyPathTransformer(Transformer):
     """The transformer to apply to tree of type System"""
+    # FIXME: Correct comments
+    # FIXME: Add comments
     def __init__(self, build_ns=Namespace("build", "b"),
                  import_ns=Namespace("import", "i"),
                  sub_import_ns=Namespace("sub-import", "s")):
@@ -201,6 +206,8 @@ class InventoryBuilder:
         list_mode (bool): The value of --list option
         parser (Lark): The parser used to parse custom expressions.
     """
+    # FIXME: Add comments
+    # FIXME: Correct comments
     def __init__(self, script_args, script_config):
         # Script args
         self.config_file = script_args.config_file
@@ -361,6 +368,7 @@ class InventoryBuilder:
                            build_ns=None,
                            import_ns=None,
                            sub_import_ns=None):
+        # FIXME: Add comments
         # If there is no required host var to load, do nothing.
         if host_vars:
             # Iterate over every key value pairs in host_vars required in
@@ -385,6 +393,7 @@ class InventoryBuilder:
 
     def _execute_sub_import(self, sub_import, import_namespace,
                             sub_import_namespace):
+        # FIXME: Add comments
         # Extract stack string
         stack_string = sub_import['stack']
 
@@ -417,6 +426,9 @@ class InventoryBuilder:
             group_prefix (str, optional): An optional prefix to add in front
                 of group names that will be created.
         """
+        # FIXME : Correct comments
+        # FIXME : Add comments
+
         # Declare namespaces
         build_namespace = Namespace("build", "b")
         import_namespace = Namespace("import", "i", host_dict)
@@ -516,6 +528,7 @@ class InventoryBuilder:
         return result
 
     def _add_element_to_group(self, element_name, group_name, inventory):
+        # FIXME: Add comments
         self._initialize_group(group_name=group_name, inventory=inventory)
         if element_name not in inventory.get(group_name).get('hosts'):
             inventory[group_name]['hosts'].append(element_name)
@@ -565,6 +578,7 @@ class InventoryBuilder:
         Returns:
             The target value
         """
+        # FIXME: Correct comments
         t = KeyPathTransformer(
             build_ns=build_ns,
             import_ns=import_ns,

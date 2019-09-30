@@ -31,16 +31,6 @@ netbox:
         filters:
           role_id: 20
 
-        # The 'group_by' field is an optional field. It expects a list and is used to configure the grouping feature.
-        # The expected values are keys or compositions of keys appended to each others with dots and possibly filtered (see the README).
-        # This allows the user to use keys in nested dicts which values must be used for groups creation. The values must be single value, not lists or dicts.
-        # The keys must be present in Netbox objects.
-        # group_by:
-          # - device_role.name
-          # - <b>double
-          # The tags keyword is special as it will create a group by tag and place an host in each of its corresponding groups.
-          # - tags
-
         # The 'group_prefix' is an optional field. If the group_by statement is used, this will prefix every group name created for the current import statement
         # with the given prefix. This is used to avoid colliding group names for different types of element.
         # Example: With the following, every device group will be prefixed with the 'dev_' particle.
@@ -65,7 +55,7 @@ netbox:
                   interface_id: id
 
         host_vars:
-          # hook root of sub imports
+          # hook root of sub imports variable 'interfaces'
           - interfaces: <s>interfaces
 
           # The key is the name of the variable in the inventory. The value is the name of the key where to find the information
@@ -85,6 +75,16 @@ netbox:
           # example:
           # main: ALL
           #   If used this way, the 'main' key in the hostvars will contain all information for a host in Netbox
+
+        # The 'group_by' field is an optional field. It expects a list and is used to configure the grouping feature.
+        # The expected values are keys or compositions of keys appended to each others with dots and possibly filtered (see the README).
+        # This allows the user to use keys in nested dicts which values must be used for groups creation. The values must be single value, not lists or dicts.
+        # The keys must be present in Netbox objects.
+        group_by:
+          - device_role.name
+          - <b>double
+          # The tags keyword is special as it will create a group by tag and place an host in each of its corresponding groups.
+          - tags
 
       # racks:
       #   host_vars:
