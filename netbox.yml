@@ -29,17 +29,17 @@ netbox:
         # The 'filters' value is passed when requesting Netbox via pynetbox. It allows to narrow the fetch from netbox.
         # This field is optional.
         filters:
-          role_id: 4
+          role_id: 20
 
         # The 'group_by' field is an optional field. It expects a list and is used to configure the grouping feature.
         # The expected values are keys or compositions of keys appended to each others with dots and possibly filtered (see the README).
         # This allows the user to use keys in nested dicts which values must be used for groups creation. The values must be single value, not lists or dicts.
         # The keys must be present in Netbox objects.
-        group_by:
-          - device_role.name
-          - <b>double
-        #   # The tags keyword is special as it will create a group by tag and place an host in each of its corresponding groups.
-          - tags
+        # group_by:
+          # - device_role.name
+          # - <b>double
+          # The tags keyword is special as it will create a group by tag and place an host in each of its corresponding groups.
+          # - tags
 
         # The 'group_prefix' is an optional field. If the group_by statement is used, this will prefix every group name created for the current import statement
         # with the given prefix. This is used to avoid colliding group names for different types of element.
@@ -48,6 +48,7 @@ netbox:
 
         # The 'host_vars' field is optional. It configures which variable form Netbox to load as hostvars in the inventory.
         sub_import:
+          # stack: interfaces
           stack: interfaces.ip_addresses
           vars:
             - interfaces:
@@ -58,23 +59,14 @@ netbox:
                   device_id: id
             - ip_addresses:
                 application: ipam
-                type: ip-ipaddress
+                type: ip-addresses
+                index: address
                 filter:
-                  interface_id: interfaces.id
-        # # {
-        #   "interfaces": {
-        #     "en0": {
-        #       "name": "en0",
-        #       "ip_addresses": {
-        #         "IP": "...."
-        #       }
-        #     }
-        #   }
-        # }
+                  interface_id: id
 
         host_vars:
           # hook root of sub imports
-          # - interfaces: <s>interfaces
+          - interfaces: <s>interfaces
 
           # The key is the name of the variable in the inventory. The value is the name of the key where to find the information
           # in the output returned by Netbox.
