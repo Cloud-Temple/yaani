@@ -490,6 +490,7 @@ class InventoryBuilder:
 
         return result
 
+
     def _get_identifier(self, host, obj_type):
         """Return an identifier for the given host.
 
@@ -514,6 +515,7 @@ class InventoryBuilder:
                 )
         return r
 
+    @staticmethod
     def _initialize_group(self, group_name, inventory):
         """
         Args:
