@@ -5,7 +5,7 @@ netbox:
     # (see https://pynetbox.readthedocs.io/en/latest/index.html for more information)
 
     # This key is mandatory
-    url: "http://netbox.cloud-temple.lan/"
+    url: "http://netbox.example.lan/"
 
     # The followings are optional
     # token: "<Netbox token>"
@@ -21,69 +21,70 @@ netbox:
     # The 'import' section is optional and must be used only if some grouping, filtering or var loading feature is needed.
     # If present, this section must contain at least one section amongst the following : dcim, virtualization... (netbox applications)
     # 'dcim' for example is an application name from netbox where we can find devices, racks, etc.
-    dcim:
-      devices:
+    virtualization:
+      virtual-machines:
         # The 'device' section configures import from Netbox on device objects. This section is called an 'import statement' of type 'device'.
         # All import statements, in whatever application, are structured in the same way.
 
         # The 'filters' value is passed when requesting Netbox via pynetbox. It allows to narrow the fetch from netbox.
         # This field is optional.
-        filters:
-          role_id: 20
+        # filters:
+        #   role_id: 20
 
         # The 'group_prefix' is an optional field. If the group_by statement is used, this will prefix every group name created for the current import statement
         # with the given prefix. This is used to avoid colliding group names for different types of element.
         # Example: With the following, every device group will be prefixed with the 'dev_' particle.
-        group_prefix: 'dev_'
+        # group_prefix: 'dev_'
 
-        sub_import:
-          - stack: rack.site_custom
-            vars:
-              - rack:
-                  application: dcim
-                  type: racks
-                  index: name
-                  filter:
-                    id: rack.id
-              - site_custom:
-                  application: dcim
-                  type: sites
-                  index: name
-                  filter:
-                    id: site.id
-          - stack: interfaces.ip_addresses
-            vars:
-              - interfaces:
-                  application: dcim
-                  type: interfaces
-                  index: name
-                  filter:
-                    device_id: id
-              - ip_addresses:
-                  application: ipam
-                  type: ip-addresses
-                  index: address
-                  filter:
-                    interface_id: id
+        # sub_import:
+        #   - stack: rack.site_custom
+        #     vars:
+        #       - rack:
+        #           application: dcim
+        #           type: racks
+        #           index: name
+        #           filter:
+        #             id: rack.id
+        #       - site_custom:
+        #           application: dcim
+        #           type: sites
+        #           index: name
+        #           filter:
+        #             id: site.id
+          # - stack: interfaces.ip_addresses
+          #   vars:
+          #     - interfaces:
+          #         application: dcim
+          #         type: interfaces
+          #         index: name
+          #         filter:
+          #           device_id: id
+          #     - ip_addresses:
+          #         application: ipam
+          #         type: ip-addresses
+          #         index: address
+          #         filter:
+          #           interface_id: id
 
         # The 'host_vars' field is optional. It configures which variable form Netbox to load as hostvars in the inventory.
         host_vars:
           # hook root of sub imports variable 'interfaces'
           - interfaces: <s>interfaces
-          - racks_custom: <s>rack
+          # - racks_custom: <s>rack
 
           # The key is the name of the variable in the inventory. The value is the name of the key where to find the information
           # in the output returned by Netbox.
           # Example:
-          - rack_name: <i>rack.name
+          # - rack_name: <i>rack.name
 
           # The 'sub' builtin is provided to transform the resulting value in the same way the python re.sub function does.
           # Example: In order to remove the CIDR notation of a subnet mask from an IP in netbox :
+          - ip: primary_ip.address
           - ip_without_cidr: <i>primary_ip.address | sub("/[0-9]+", "")
           # The 'default_key' builtin is provided to use a fallback key if the current value is None.
           - ansible_host: primary_ip.address | sub("/[0-9]+", "") | default_key(name)
           - ip_with_cidr: primary_ip.address
-          - double: <b>rack_name | sub("-", "_")
+          # - double: <b>rack_name | sub("-", "_")
 
           # The 'ALL' keyword as a value loads the entire dict returned by Netbox
           # example:
@@ -95,8 +96,8 @@ netbox:
         # This allows the user to use keys in nested dicts which values must be used for groups creation. The values must be single value, not lists or dicts.
         # The keys must be present in Netbox objects.
         group_by:
-          - device_role.name
-          - <b>double
+          # - device_role.name
+          # - <b>double
           # The tags keyword is special as it will create a group by tag and place an host in each of its corresponding groups.
           - tags
 
@@ -105,4 +106,12 @@ netbox:
       #     id: id
       # filters:
       #  role_id: 3
+  # render:
+    # The whole inventory dict is passed to the following function
+    # - module: custom
+    #   name: custom_func1
+    # - module: custom
+    #   name: custom_func2
+    # - module: custom
+    #   name: custom_func3
 
