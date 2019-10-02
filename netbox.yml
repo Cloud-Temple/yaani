@@ -36,27 +36,41 @@ netbox:
         # Example: With the following, every device group will be prefixed with the 'dev_' particle.
         group_prefix: 'dev_'
 
-        # The 'host_vars' field is optional. It configures which variable form Netbox to load as hostvars in the inventory.
         sub_import:
-          # stack: interfaces
-          stack: interfaces.ip_addresses
-          vars:
-            - interfaces:
-                application: dcim
-                type: interfaces
-                index: name
-                filter:
-                  device_id: id
-            - ip_addresses:
-                application: ipam
-                type: ip-addresses
-                index: address
-                filter:
-                  interface_id: id
+          - stack: rack.site_custom
+            vars:
+              - rack:
+                  application: dcim
+                  type: racks
+                  index: name
+                  filter:
+                    id: rack.id
+              - site_custom:
+                  application: dcim
+                  type: sites
+                  index: name
+                  filter:
+                    id: site.id
+          - stack: interfaces.ip_addresses
+            vars:
+              - interfaces:
+                  application: dcim
+                  type: interfaces
+                  index: name
+                  filter:
+                    device_id: id
+              - ip_addresses:
+                  application: ipam
+                  type: ip-addresses
+                  index: address
+                  filter:
+                    interface_id: id
 
+        # The 'host_vars' field is optional. It configures which variable form Netbox to load as hostvars in the inventory.
         host_vars:
           # hook root of sub imports variable 'interfaces'
           - interfaces: <s>interfaces
+          - racks_custom: <s>rack
 
           # The key is the name of the variable in the inventory. The value is the name of the key where to find the information
           # in the output returned by Netbox.
