@@ -7,6 +7,7 @@ import argparse
 import sys
 import os
 import yaml
+import importlib
 try:
     import json
 except ImportError:
@@ -21,9 +22,86 @@ import pynetbox
 # The name of the Environment variable where to find the path towards the
 # configuration file
 DEFAULT_ENV_CONFIG_FILE = "NETBOX_CONFIG_FILE"
-
+DEFAULT_MODULES_DIR = "modules"
 
 class KeyPathResolver:
+    class KeyPathTransformer(Transformer):
+        """The key path transformer is an AST visitor used to resolve expressions
+        in the configuration file.
+        """
+        DEFAULT_NS = 'i'
+
+        def __init__(self):
+            """The constructor of the transformer
+
+            Args:
+                build_ns (dict): Namespace containing variables declared at
+                    hostvars loading phase
+                import_ns (dict): Namespace containing variables returned by
+                    netbox
+                sub_import_ns (dict): Namespace containing variables declared
+                    at sub import phase
+            """
+            self._namespaces = {}
+
+        def record_namespace(self, key, namespace):
+            if key not in self._namespaces.keys():
+                self._namespaces[key] = namespace
+            else:
+                pass
+
+        def expr(self, n):
+            return n[0]
+
+        def key_path(self, n):
+            ns_selector = str(n[0])
+            # Select the proper namespace to browse through
+            try:
+                selected_ns = self._namespaces[ns_selector]
+            except KeyError:
+                sys.exist("Unknown namespace")
+
+            # Remove the namespace indication
+            keys_list = n[1:]
+            for key in keys_list:
+                if selected_ns is None:
+                    break
+                elif key in list(selected_ns.keys()):
+                    selected_ns = selected_ns[key]
+                elif key == 'ALL' and key is keys_list[-1]:
+                    break
+                else:
+                    sys.exit(
+                        "Error: The key solving failed "
+                        "in key_path '%s'" % (keys_list)
+                    )
+
+            return selected_ns
+
+        def sub(self, n):
+            if n[0] is None:
+                return None
+            data_str = str(n[0])
+            pattern = str(n[1]).strip("\"").strip("\'")
+            repl = str(n[2]).strip("\"").strip("\'")
+            if len(n) > 3:
+                return re.sub(
+                    pattern, repl, data_str,
+                    *list(map(lambda x: int(x), n[3:]))
+                )
+            return re.sub(pattern, repl, data_str)
+
+        def default_key(self, n):
+            if n[0] is None:
+                return n[1]
+            else:
+                return n[0]
+
+        def namespace(self, n):
+            if len(n):
+                return str(n[0])
+            return self.DEFAULT_NS
+
     def __init__(self):
         self._grammar = """
             expr: sub
@@ -49,18 +127,14 @@ class KeyPathResolver:
             self._grammar, start="expr", parser='lalr'
         )
         self._namespaces = {}
+        self._transformer = self.KeyPathTransformer()
 
     def record_namespace(self, key, namespace):
-        if key not in self._namespaces.keys():
-            self._namespaces[key] = namespace
-        else:
-            pass
+        self._namespaces[key] = namespace
+        self._transformer.record_namespace(key, namespace)
 
     def resolve(self, key_path):
-        t = KeyPathTransformer()
-        for k, ns in self._namespaces.items():
-            t.record_namespace(k, ns)
-        return t.transform(self._parser.parse(key_path))
+        return self._transformer.transform(self._parser.parse(key_path))
 
 
 class StackTransformer(Transformer):
@@ -160,84 +234,6 @@ class StackTransformer(Transformer):
             sub_pointer = l
 
         return self._sub_import_namespace
-
-
-class KeyPathTransformer(Transformer):
-    """The key path transformer is an AST visitor used to resolve expressions
-    in the configuration file.
-    """
-    DEFAULT_NS = 'i'
-
-    def __init__(self):
-        """The constructor of the transformer
-
-        Args:
-            build_ns (dict): Namespace containing variables declared at
-                hostvars loading phase
-            import_ns (dict): Namespace containing variables returned by
-                netbox
-            sub_import_ns (dict): Namespace containing variables declared
-                at sub import phase
-        """
-        self._namespaces = {}
-
-    def record_namespace(self, key, namespace):
-        if key not in self._namespaces.keys():
-            self._namespaces[key] = namespace
-        else:
-            pass
-
-    def expr(self, n):
-        return n[0]
-
-    def key_path(self, n):
-        ns_selector = str(n[0])
-        # Select the proper namespace to browse through
-        try:
-            selected_ns = self._namespaces[ns_selector]
-        except KeyError:
-            sys.exist("Unknown namespace")
-
-        # Remove the namespace indication
-        keys_list = n[1:]
-        for key in keys_list:
-            if selected_ns is None:
-                break
-            elif key in list(selected_ns.keys()):
-                selected_ns = selected_ns[key]
-            elif key == 'ALL' and key is keys_list[-1]:
-                break
-            else:
-                sys.exit(
-                    "Error: The key solving failed "
-                    "in key_path '%s'" % (keys_list)
-                )
-
-        return selected_ns
-
-    def sub(self, n):
-        if n[0] is None:
-            return None
-        data_str = str(n[0])
-        pattern = str(n[1]).strip("\"").strip("\'")
-        repl = str(n[2]).strip("\"").strip("\'")
-        if len(n) > 3:
-            return re.sub(
-                pattern, repl, data_str,
-                *list(map(lambda x: int(x), n[3:]))
-            )
-        return re.sub(pattern, repl, data_str)
-
-    def default_key(self, n):
-        if n[0] is None:
-            return n[1]
-        else:
-            return n[0]
-
-    def namespace(self, n):
-        if len(n):
-            return str(n[0])
-        return self.DEFAULT_NS
 
 
 class InventoryBuilder:
@@ -360,8 +356,8 @@ class InventoryBuilder:
         filters = import_options.get("filters", None)
         group_by = import_options.get('group_by', None)
         group_prefix = import_options.get('group_prefix', None)
-        host_vars_section = import_options.get('host_vars', None)
-        sub_import = import_options.get('sub_import', None)
+        host_vars_section = import_options.get('host_vars', [])
+        sub_import = import_options.get('sub_import', [])
 
         # Fetch the list of entities from Netbox
         netbox_hosts_list = self._get_elements_list(
@@ -440,7 +436,7 @@ class InventoryBuilder:
 
     def _add_element_to_inventory(self, element_index, host_dict, inventory,
                                   obj_type, group_by=None, group_prefix=None,
-                                  host_vars=None, sub_import=None):
+                                  host_vars=None, sub_import=[]):
         # Declare namespaces
         build_namespace = {}
         import_namespace = dict(host_dict)
@@ -545,7 +541,6 @@ class InventoryBuilder:
         return result
 
     def _add_element_to_group(self, element_name, group_name, inventory):
-        # FIXME: Add comments
         self._initialize_group(group_name=group_name, inventory=inventory)
         if element_name not in inventory.get(group_name).get('hosts'):
             inventory[group_name]['hosts'].append(element_name)
@@ -589,25 +584,18 @@ class InventoryBuilder:
 
         Args:
             key_path (str): The path toward the key
-            data (dict): The actual host data dict that holds
-                the target value.
+            build_ns (dict): The namespace corresponding build phase
+            import_ns (dict): The namespace corresponding import phase
+            sub_import_ns (dict): The namespace corresponding sub-import phase
 
         Returns:
             The target value
         """
-        # FIXME: Correct comments
         r = KeyPathResolver()
         r.record_namespace("b", build_ns)
         r.record_namespace("i", import_ns)
         r.record_namespace("s", sub_import_ns)
         return r.resolve(key_path)
-
-        # t = KeyPathTransformer(
-        #     build_ns=build_ns,
-        #     import_ns=import_ns,
-        #     sub_import_ns=sub_import_ns
-        # )
-        # return t.transform(self._key_path_parser.parse(key_path))
 
 
 def parse_cli_args(script_args):
@@ -799,6 +787,23 @@ def validate_configuration(configuration):
                                 }
                             }
                         }
+                    },
+                    "render": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": ["module", "name"],
+                            "properties": {
+                                "module": {
+                                    "type": "string"
+                                },
+                                "name": {
+                                    "type": "string"
+                                }
+                            }
+                        }
                     }
                 },
                 "required": ["api"]
@@ -843,6 +848,45 @@ def dump_json_inventory(inventory):
     print(json.dumps(inventory))
 
 
+def render_inventory(render_configuration, inventory):
+    if render_configuration:
+        func_array = []
+        for fdef in render_configuration:
+            try:
+                custom_module_name = fdef['module']
+                func_name = fdef['name']
+            except KeyError:
+                sys.exit("Could not parse custom module and function names")
+
+            try:
+                module_name = (
+                    "%s.%s" % (
+                        DEFAULT_MODULES_DIR,
+                        custom_module_name
+                    )
+                )
+                custom_module = importlib.import_module(module_name)
+            except ImportError:
+                sys.exit(
+                    "The custom module %s could not be imported" % (module_name)
+                )
+
+            try:
+                custom_func = getattr(custom_module, func_name)
+            except AttributeError:
+                sys.exit(
+                    "The custom function %s could not be found in the custom "
+                    "module" % (func_name)
+                )
+
+            func_array.append(custom_func)
+
+        for f in func_array:
+            inventory = f(inventory)
+
+    dump_json_inventory(inventory)
+
+
 def main():
     # Parse cli args
     args = parse_cli_args(sys.argv[1:])
@@ -851,8 +895,14 @@ def main():
 
     # Build the inventory
     builder = InventoryBuilder(args, configuration)
+    inventory = builder.build_inventory()
+
     # Print the JSON formatted inventory dict
-    dump_json_inventory(builder.build_inventory())
+    render_inventory(
+        configuration['netbox'].get('render', {}),
+        inventory
+    )
+
 
 if __name__ == '__main__':
     main()
