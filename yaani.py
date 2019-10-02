@@ -7,6 +7,7 @@ import argparse
 import sys
 import os
 import yaml
+import importlib
 try:
     import json
 except ImportError:
@@ -21,209 +22,88 @@ import pynetbox
 # The name of the Environment variable where to find the path towards the
 # configuration file
 DEFAULT_ENV_CONFIG_FILE = "NETBOX_CONFIG_FILE"
+DEFAULT_MODULES_DIR = "modules"
 
+class KeyPathResolver:
+    class KeyPathTransformer(Transformer):
+        """The key path transformer is an AST visitor used to resolve expressions
+        in the configuration file.
+        """
+        DEFAULT_NS = 'i'
 
-class Namespace:
-    # FIXME: Reconsider using only a dict as a namespace
-    def __init__(self, name, key, vars_dict={}):
-        self.vars = vars_dict.copy()
-        self.name = name
-        self.key = key
+        def __init__(self):
+            """The constructor of the transformer
 
-    def get_key(self):
-        return self.key
+            Args:
+                build_ns (dict): Namespace containing variables declared at
+                    hostvars loading phase
+                import_ns (dict): Namespace containing variables returned by
+                    netbox
+                sub_import_ns (dict): Namespace containing variables declared
+                    at sub import phase
+            """
+            self._namespaces = {}
 
-    def __str__(self):
-        return self.name + " namespace"
+        def record_namespace(self, key, namespace):
+            if key not in self._namespaces.keys():
+                self._namespaces[key] = namespace
+            else:
+                pass
 
-    def __dict__(self):
-        return self.vars
+        def expr(self, n):
+            return n[0]
 
-    def __getitem__(self, key):
-        return self.vars[key]
-
-    def __setitem__(self, key, value):
-        self.vars[key] = value
-
-    def keys(self):
-        return self.vars.keys()
-
-    def items(self):
-        return self.vars.items()
-
-
-class StackTransformer(Transformer):
-    # FIXME: Correct comments
-    # FIXME: Add comments
-    def __init__(self, vars_definition, api_connector, import_namespace,
-                 sub_import_namespace):
-        self.api_connector = api_connector
-        self.vars_definition = vars_definition
-        self.import_namespace = import_namespace
-        self.sub_import_namespace = sub_import_namespace
-
-    def _import_var(self, parent_namespace, loading_var):
-        # Access var configuration
-        try:
-            var_configuration = self.vars_definition[loading_var]
-        except KeyError:
-            sys.exit(
-                "Bad key %s in sub-import section. Variable not defined in "
-                "sub_import.vars section." % loading_var
-            )
-
-        # Access netbox location of wanted object
-        app = getattr(self.api_connector, var_configuration['application'])
-        endpoint = getattr(app, var_configuration['type'])
-
-        # Resolve filter args from "device_id": id to "device_id": 123
-        filter_args = {}
-        for k, v in var_configuration['filter'].items():
+        def key_path(self, n):
+            ns_selector = str(n[0])
+            # Select the proper namespace to browse through
             try:
-                filter_args[k] = parent_namespace[v]
+                selected_ns = self._namespaces[ns_selector]
             except KeyError:
-                sys.exit(
-                    "The key given as a filter value '%s' does not exist." % v
-                )
+                sys.exist("Unknown namespace")
 
-        # fetch sub elements from netbox
-        elements = endpoint.filter(**filter_args)
-
-        # Set the name of the key that will be used for index
-        index_key_name = var_configuration['index']
-
-        ret = {}
-        for e in elements:
-            # Resolve the actual index value
-            key = getattr(e, index_key_name)
-            if key in list(ret.keys()):
-                sys.exit(
-                    "The key '%s', specified as an index key, is resolved to "
-                    "non unique values." % key
-                )
-            ret[key] = dict(e)
-
-        return ret
-
-    def stack(self, n):
-        return n[0]
-
-    def nested_path(self, n):
-        sub_pointer = [self.sub_import_namespace]
-        parent_ns = self.import_namespace
-
-        for path in n:
-            l = []
-            for v in sub_pointer:
-                if parent_ns is None:
-                    parent_ns = v
-                v[str(path)] = self._import_var(
-                    parent_namespace=parent_ns,
-                    loading_var=str(path)
-                )
-                l += list(v[str(path)].values())
-            parent_ns = None
-            sub_pointer = l
-
-        return self.sub_import_namespace
-
-
-class KeyPathTransformer(Transformer):
-    """The transformer to apply to tree of type System"""
-    # FIXME: Correct comments
-    # FIXME: Add comments
-    def __init__(self, build_ns=Namespace("build", "b"),
-                 import_ns=Namespace("import", "i"),
-                 sub_import_ns=Namespace("sub-import", "s")):
-        self.namespaces = {}
-        self.namespaces[build_ns.get_key()] = build_ns
-        self.namespaces[import_ns.get_key()] = import_ns
-        self.namespaces[sub_import_ns.get_key()] = sub_import_ns
-
-    def expr(self, n):
-        return n[0]
-
-    def key_path(self, n):
-        # Select the proper namespace to use
-        try:
-            pointer = self.namespaces[str(n[0])]
-        except KeyError:
-            # If the namespace was not found, use import namespace by default
-            pointer = self.namespaces["i"]
-        # Remove the namespace indication
-        keys_list = n[1:]
-        for key in keys_list:
-            try:
-                if key in list(pointer.keys()):
-                    pointer = pointer[key]
+            # Remove the namespace indication
+            keys_list = n[1:]
+            for key in keys_list:
+                if selected_ns is None:
+                    break
+                elif key in list(selected_ns.keys()):
+                    selected_ns = selected_ns[key]
                 elif key == 'ALL' and key is keys_list[-1]:
-                    return pointer
+                    break
                 else:
                     sys.exit(
                         "Error: The key solving failed "
                         "in key_path '%s'" % (keys_list)
                     )
-            except AttributeError:
+
+            return selected_ns
+
+        def sub(self, n):
+            if n[0] is None:
                 return None
+            data_str = str(n[0])
+            pattern = str(n[1]).strip("\"").strip("\'")
+            repl = str(n[2]).strip("\"").strip("\'")
+            if len(n) > 3:
+                return re.sub(
+                    pattern, repl, data_str,
+                    *list(map(lambda x: int(x), n[3:]))
+                )
+            return re.sub(pattern, repl, data_str)
 
-        return pointer
+        def default_key(self, n):
+            if n[0] is None:
+                return n[1]
+            else:
+                return n[0]
 
-    def sub(self, n):
-        if n[0] is None:
-            return None
-        data_str = str(n[0])
-        pattern = str(n[1]).strip("\"").strip("\'")
-        repl = str(n[2]).strip("\"").strip("\'")
-        if len(n) > 3:
-            return re.sub(
-                pattern, repl, data_str,
-                *list(map(lambda x: int(x), n[3:]))
-            )
-        return re.sub(pattern, repl, data_str)
+        def namespace(self, n):
+            if len(n):
+                return str(n[0])
+            return self.DEFAULT_NS
 
-    def default_key(self, n):
-        if n[0] is None:
-            return n[1]
-        else:
-            return n[0]
-
-    def namespace(self, n):
-        if len(n):
-            return str(n[0])
-        return None
-
-
-class InventoryBuilder:
-    """Inventory Builder is the object that builds and return the inventory.
-
-    Attributes:
-        config_api (dict): The configuration of the api section
-        config_data (dict): The configuration parsed from the configuration
-                            file
-        config_file (str): The path of thge configuration file
-        host (str): The hostname if specified, None else
-        imports (list): The list of import statements in the configuration file
-        list_mode (bool): The value of --list option
-        parser (Lark): The parser used to parse custom expressions.
-    """
-    # FIXME: Add comments
-    # FIXME: Correct comments
-    def __init__(self, script_args, script_config):
-        # Script args
-        self.config_file = script_args.config_file
-        self.host = script_args.host
-        self.list_mode = script_args.list
-
-        # Configuration file
-        self.config_data = script_config['netbox']
-        self.config_api = self.config_data['api']
-        self.imports = self.config_data.get('import', None)
-
-        # Create the api connector
-        self.nb = pynetbox.api(**self.config_api)
-
-        # Expression resolutions objects
-        key_path_grammar = """
+    def __init__(self):
+        self._grammar = """
             expr: sub
                 | default_key
                 | key_path
@@ -243,6 +123,151 @@ class InventoryBuilder:
             %import common.WS
             %ignore WS
         """
+        self._parser = Lark(
+            self._grammar, start="expr", parser='lalr'
+        )
+        self._namespaces = {}
+        self._transformer = self.KeyPathTransformer()
+
+    def record_namespace(self, key, namespace):
+        self._namespaces[key] = namespace
+        self._transformer.record_namespace(key, namespace)
+
+    def resolve(self, key_path):
+        return self._transformer.transform(self._parser.parse(key_path))
+
+
+class StackTransformer(Transformer):
+    """Provides an AST visitor. It is used to implement the feature of
+    importing from netbox sub-elements joined together by certain parameters.
+    """
+    def __init__(self, vars_definition,
+                 api_connector,
+                 import_namespace,
+                 sub_import_namespace):
+        """Constructor of the stack transformer.
+
+        Args:
+            vars_definition (dict): The dict containing the definition
+                of the vars referenced in the stack string
+            api_connector (pynetbox.api): The connector to the netbox api
+            import_namespace (dict): Namespace containing the vars from netbox
+                for the current host
+            sub_import_namespace (dict): Namespace containing the vars declared
+                in the sub-import section.
+        """
+        self._api_connector = api_connector
+        self._vars_definition = vars_definition
+        self._import_namespace = import_namespace
+        self._sub_import_namespace = sub_import_namespace
+
+    def _import_var(self, parent_namespace, loading_var):
+        # Access var configuration
+        try:
+            var_configuration = self._vars_definition[loading_var]
+        except KeyError:
+            # The var is not declared, exit program.
+            sys.exit(
+                "Bad key %s in sub-import section. Variable not defined in "
+                "sub_import.vars section." % loading_var
+            )
+
+        # Access netbox API endpoint of wanted object
+        app = getattr(self._api_connector, var_configuration['application'])
+        endpoint = getattr(app, var_configuration['type'])
+
+        # Resolve the actual filter value
+        # ex: "device_id": "id" --> "device_id": 123
+        filter_args = {}
+        r = KeyPathResolver()
+        r.record_namespace("i", parent_namespace)
+        for k, v in var_configuration['filter'].items():
+            try:
+                filter_args[k] = r.resolve(v)
+            except KeyError:
+                sys.exit(
+                    "The key given as a filter value '%s' does not exist." % v
+                )
+
+        # fetch sub elements from netbox
+        if "id" in list(filter_args.keys()):
+            elements = [endpoint.get(filter_args.get("id"))]
+        else:
+            elements = endpoint.filter(**filter_args)
+
+        # Set the name of the key that will be used for index
+        index_key_name = var_configuration['index']
+
+        ret = {}
+        for e in elements:
+            # Resolve the actual index value
+            index_value = getattr(e, index_key_name)
+
+            if index_value in list(ret.keys()):
+                # The index key must lead to a unique value, avoid duplicate
+                # e[index_key] must be unique
+                sys.exit(
+                    "The key '%s', specified as an index key, is resolved to "
+                    "non unique values." % index_value
+                )
+            ret[index_value] = dict(e)
+        return ret
+
+    def stack(self, n):
+        return n[0]
+
+    def nested_path(self, n):
+        sub_pointer = [self._sub_import_namespace]
+        parent_ns = self._import_namespace
+
+        for path in map(lambda x: str(x), n):
+            l = []
+            for v in sub_pointer:
+                if parent_ns is None:
+                    parent_ns = v
+                v[path] = self._import_var(
+                    parent_namespace=parent_ns,
+                    loading_var=path
+                )
+                l += list(v[path].values())
+            parent_ns = None
+            sub_pointer = l
+
+        return self._sub_import_namespace
+
+
+class InventoryBuilder:
+    """Inventory Builder is the object that builds and return the inventory.
+
+    Attributes:
+        config_api (dict): The configuration of the api section
+        config_data (dict): The configuration parsed from the configuration
+                            file
+        config_file (str): The path of thge configuration file
+        host (str): The hostname if specified, None else
+        imports (list): The list of import statements in the configuration file
+        key_path_parser (Lark): The parser used to parse expressions in the
+            configuration file
+        list_mode (bool): The value of --list option
+        nb (pynetbox.api): The netbox api connector
+        stack_parser (Lark): The parser used to parse the stack string
+
+    """
+    def __init__(self, script_args, script_config):
+        # Script args
+        self._config_file = script_args.config_file
+        self._host = script_args.host
+        self._list_mode = script_args.list
+
+        # Configuration file
+        self._config_data = script_config['netbox']
+        self._config_api = self._config_data['api']
+        self._import_section = self._config_data.get('import', None)
+
+        # Create the api connector
+        self._nb = pynetbox.api(**self._config_api)
+
+        # Expression resolutions objects
 
         stack_grammar = """
             stack: nested_path
@@ -251,11 +276,7 @@ class InventoryBuilder:
             VAR: /\\w+/
         """
 
-        self.key_path_parser = Lark(
-            key_path_grammar, start="expr", parser='lalr'
-        )
-
-        self.stack_parser = Lark(
+        self._stack_parser = Lark(
             stack_grammar, start="stack",
         )
 
@@ -269,16 +290,16 @@ class InventoryBuilder:
             dict: The inventory
         """
         # Check if both mode are deactivated
-        if not self.list_mode and not self.host:
+        if not self._list_mode and not self._host:
             return {}
 
         inventory = self._init_inventory()
 
-        if self.list_mode:
+        if self._list_mode:
 
-            if self.imports:
+            if self._import_section:
                 # Check whether the import section exists.
-                iterator = self.imports
+                iterator = self._import_section
             else:
                 # Set the default behaviour args
                 iterator = {
@@ -288,7 +309,7 @@ class InventoryBuilder:
                 }
 
             # For each application, iterate over all inner object types
-            for app_name, app_import in list(self.imports.items()):
+            for app_name, app_import in list(self._import_section.items()):
                 for type_key, import_statement in app_import.items():
                     self._execute_import(
                         application=app_name,
@@ -305,7 +326,7 @@ class InventoryBuilder:
             #   A host is considered to be a device. Check if devices import
             #   options are set.
             device_import_options = (
-                self.imports
+                self._import_section
                 .get('dcim', {})
                 .get('devices', {})
             )
@@ -317,7 +338,7 @@ class InventoryBuilder:
                 inventory=inventory
             )
 
-            return inventory['_meta']['hostvars'].get(self.host, {})
+            return inventory['_meta']['hostvars'].get(self._host, {})
 
     def _execute_import(self, application, import_type,
                         import_options, inventory):
@@ -335,15 +356,15 @@ class InventoryBuilder:
         filters = import_options.get("filters", None)
         group_by = import_options.get('group_by', None)
         group_prefix = import_options.get('group_prefix', None)
-        host_vars_section = import_options.get('host_vars', None)
-        sub_import = import_options.get('sub_import', None)
+        host_vars_section = import_options.get('host_vars', [])
+        sub_import = import_options.get('sub_import', [])
 
         # Fetch the list of entities from Netbox
         netbox_hosts_list = self._get_elements_list(
             application,
             import_type,
             filters=filters,
-            specific_host=self.host
+            specific_host=self._host
         )
 
         # If the netbox hosts list fetching was successful, add the elements to
@@ -363,12 +384,13 @@ class InventoryBuilder:
                 sub_import=sub_import
             )
 
-    def _load_element_vars(self, element_name, host, inventory,
-                           host_vars=None,
-                           build_ns=None,
-                           import_ns=None,
-                           sub_import_ns=None):
-        # FIXME: Add comments
+    def _load_element_vars(self, element_name, inventory,
+                           host_vars,
+                           build_ns,
+                           import_ns,
+                           sub_import_ns):
+        """Enrich build namespace with hostvars configuration.
+        """
         # If there is no required host var to load, do nothing.
         if host_vars:
             # Iterate over every key value pairs in host_vars required in
@@ -393,7 +415,9 @@ class InventoryBuilder:
 
     def _execute_sub_import(self, sub_import, import_namespace,
                             sub_import_namespace):
-        # FIXME: Add comments
+        """Enrich sub import namespace with configured sub elements
+        from netbox.
+        """
         # Extract stack string
         stack_string = sub_import['stack']
 
@@ -403,46 +427,32 @@ class InventoryBuilder:
             vars_definition.update(i)
 
         t = StackTransformer(
-            api_connector=self.nb,
+            api_connector=self._nb,
             vars_definition=vars_definition,
             import_namespace=import_namespace,
             sub_import_namespace=sub_import_namespace
         )
-        return t.transform(self.stack_parser.parse(stack_string))
+        return t.transform(self._stack_parser.parse(stack_string))
 
     def _add_element_to_inventory(self, element_index, host_dict, inventory,
                                   obj_type, group_by=None, group_prefix=None,
-                                  host_vars=None, sub_import=None):
-        """Insert the given element in the propper groups.
-
-        Args:
-            element_index (str): The name of the element
-            host_dict (dict): The actual data of the element
-            inventory (dict): The inventory in which the element must be
-                inserted.
-            obj_type (str): The type of the element
-            group_by (list, optional): The list of group ot create and to add
-                the element to.
-            group_prefix (str, optional): An optional prefix to add in front
-                of group names that will be created.
-        """
-        # FIXME : Correct comments
-        # FIXME : Add comments
-
+                                  host_vars=None, sub_import=[]):
         # Declare namespaces
-        build_namespace = Namespace("build", "b")
-        import_namespace = Namespace("import", "i", host_dict)
-        sub_import_namespace = Namespace("sub-import", "s")
+        build_namespace = {}
+        import_namespace = dict(host_dict)
+        sub_import_namespace = {}
 
         # Handle sub imports
-        self._execute_sub_import(
-            sub_import,
-            import_namespace,
-            sub_import_namespace
-        )
+        for imports in sub_import:
+            self._execute_sub_import(
+                imports,
+                import_namespace,
+                sub_import_namespace
+            )
+
         # Load the host vars in the inventory
         self._load_element_vars(
-            element_index, host_dict,
+            element_index,
             inventory,
             host_vars,
             build_namespace,
@@ -514,21 +524,23 @@ class InventoryBuilder:
             specific_host (str, optional): The name of a specific host which
                 host vars must be returned alone.
         """
-        app_obj = getattr(self.nb, application)
+        app_obj = getattr(self._nb, application)
         endpoint = getattr(app_obj, object_type)
 
         # specific host handling
         if specific_host is not None:
             result = endpoint.filter(name=specific_host)
         elif filters is not None:
-            result = endpoint.filter(**filters)
+            if "id" in list(filters.keys()):
+                result = [endpoint.get(filters.get("id"))]
+            else:
+                result = endpoint.filter(**filters)
         else:
             result = endpoint.all()
 
         return result
 
     def _add_element_to_group(self, element_name, group_name, inventory):
-        # FIXME: Add comments
         self._initialize_group(group_name=group_name, inventory=inventory)
         if element_name not in inventory.get(group_name).get('hosts'):
             inventory[group_name]['hosts'].append(element_name)
@@ -572,19 +584,18 @@ class InventoryBuilder:
 
         Args:
             key_path (str): The path toward the key
-            data (dict): The actual host data dict that holds
-                the target value.
+            build_ns (dict): The namespace corresponding build phase
+            import_ns (dict): The namespace corresponding import phase
+            sub_import_ns (dict): The namespace corresponding sub-import phase
 
         Returns:
             The target value
         """
-        # FIXME: Correct comments
-        t = KeyPathTransformer(
-            build_ns=build_ns,
-            import_ns=import_ns,
-            sub_import_ns=sub_import_ns
-        )
-        return t.transform(self.key_path_parser.parse(key_path))
+        r = KeyPathResolver()
+        r.record_namespace("b", build_ns)
+        r.record_namespace("i", import_ns)
+        r.record_namespace("s", sub_import_ns)
+        return r.resolve(key_path)
 
 
 def parse_cli_args(script_args):
@@ -629,37 +640,41 @@ def validate_configuration(configuration):
             configuration (dict): The parsed configuration
     """
     sub_import_def = {
-        "type": "object",
-        "required": ["stack", "vars"],
-        "properties": {
-            "stack": {
-                "type": "string"
-            },
-            "vars": {
-                "type": "array",
-                "minItems": 1,
-                "items": {
-                    "type": "object",
-                    "maxProperties": 1,
-                    "minProperties": 1,
-                    "patternProperties": {
-                        "\\w+": {
-                            "type": "object",
-                            "properties": {
-                                "application": {
-                                    "type": "string"
-                                },
-                                "type": {
-                                    "type": "string"
-                                },
-                                "index": {
-                                    "type": "string"
-                                },
-                                "filter": {
-                                    "type": "object",
-                                    "patternProperties": {
-                                        "\\w+": {
-                                            "type": "string"
+        "type": "array",
+        "minItems": 1,
+        "items": {
+            "type": "object",
+            "required": ["stack", "vars"],
+            "properties": {
+                "stack": {
+                    "type": "string"
+                },
+                "vars": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "maxProperties": 1,
+                        "minProperties": 1,
+                        "patternProperties": {
+                            "\\w+": {
+                                "type": "object",
+                                "properties": {
+                                    "application": {
+                                        "type": "string"
+                                    },
+                                    "type": {
+                                        "type": "string"
+                                    },
+                                    "index": {
+                                        "type": "string"
+                                    },
+                                    "filter": {
+                                        "type": "object",
+                                        "patternProperties": {
+                                            "\\w+": {
+                                                "type": "string"
+                                            }
                                         }
                                     }
                                 }
@@ -772,6 +787,23 @@ def validate_configuration(configuration):
                                 }
                             }
                         }
+                    },
+                    "render": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": ["module", "name"],
+                            "properties": {
+                                "module": {
+                                    "type": "string"
+                                },
+                                "name": {
+                                    "type": "string"
+                                }
+                            }
+                        }
                     }
                 },
                 "required": ["api"]
@@ -816,6 +848,45 @@ def dump_json_inventory(inventory):
     print(json.dumps(inventory))
 
 
+def render_inventory(render_configuration, inventory):
+    if render_configuration:
+        func_array = []
+        for fdef in render_configuration:
+            try:
+                custom_module_name = fdef['module']
+                func_name = fdef['name']
+            except KeyError:
+                sys.exit("Could not parse custom module and function names")
+
+            try:
+                module_name = (
+                    "%s.%s" % (
+                        DEFAULT_MODULES_DIR,
+                        custom_module_name
+                    )
+                )
+                custom_module = importlib.import_module(module_name)
+            except ImportError:
+                sys.exit(
+                    "The custom module %s could not be imported" % (module_name)
+                )
+
+            try:
+                custom_func = getattr(custom_module, func_name)
+            except AttributeError:
+                sys.exit(
+                    "The custom function %s could not be found in the custom "
+                    "module" % (func_name)
+                )
+
+            func_array.append(custom_func)
+
+        for f in func_array:
+            inventory = f(inventory)
+
+    dump_json_inventory(inventory)
+
+
 def main():
     # Parse cli args
     args = parse_cli_args(sys.argv[1:])
@@ -824,8 +895,14 @@ def main():
 
     # Build the inventory
     builder = InventoryBuilder(args, configuration)
+    inventory = builder.build_inventory()
+
     # Print the JSON formatted inventory dict
-    dump_json_inventory(builder.build_inventory())
+    render_inventory(
+        configuration['netbox'].get('render', {}),
+        inventory
+    )
+
 
 if __name__ == '__main__':
     main()
