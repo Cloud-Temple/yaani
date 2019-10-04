@@ -1,7 +1,65 @@
 import pytest
 
-from yaani import parse_cli_args, validate_configuration
+from yaani import (
+    parse_cli_args,
+    validate_configuration,
+    resolve_expression
+)
 
+import pytest
+import pyjq
+
+
+@pytest.fixture
+def test_data():
+    return {
+        "a": 1,
+        "b": 2,
+        "c": 3,
+        "d": None,
+        "e": {
+            "e_a": "test value"
+        },
+        "l": [
+            "1",
+            "2",
+            "3"
+        ],
+        "l2": [
+            {
+                "a1": "b1"
+            },
+            {
+                "a1": "b2"
+            },
+            {
+                "a1": "b3"
+            }
+        ]
+    }
+
+
+@pytest.mark.parametrize("arg, exp", [
+    (".a", [1]),  # regular key
+    (".b", [2]),  # regular key
+    (".c", [3]),  # regular key
+    (".d", [None]),  # regular key with None value
+    (".e", [{"e_a": "test value"}]),  # regular key with dict value
+    (".e.e_a", ["test value"]),  # key in a dict
+    (".a // \"b\"", [1]),  # default_key test on non null value
+    (".d // \"b\"", ["b"]),  # default_key test on null value
+    (".e.e_a | sub(\"value\";\"\")", ["test "]),  # sub on non null value
+    (".d // \"_\"| sub(\"value\";\"\")", ["_"]),  # sub non null value
+    (".l[] | sub(\"2\";\"\")", ["1", "", "3"]),  # sub on list value
+    # ----------------------------------------------------------------
+    (".l2[].a1", ["b1", "b2", "b3"]),  # expand list
+    # ("d | sub(\"value\",\"\")", None),  # sub non null value
+    # ("d | sub(\"value\",\"\")", None),  # sub non null value
+    # ("d | sub(\"value\",\"\")", None),  # sub non null value
+    # ("d | sub(\"value\",\"\")", None),  # sub non null value
+])
+def test_expr_reso_grammar_ok(kpr, test_data, arg, exp):
+    assert kpr.resolve(arg, test_data) == exp
 
 @pytest.mark.parametrize("args,exp", [
     (['-c', 'test.yml', '--list'], {  # config file plus list
