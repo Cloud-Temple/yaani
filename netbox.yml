@@ -81,7 +81,7 @@ netbox:
 
           # The 'sub' builtin is provided to transform the resulting value in the same way the python re.sub function does.
           # Example: In order to remove the CIDR notation of a subnet mask from an IP in netbox :
-          - ip: i#.primary_ip.address
+          - ip: il#.primary_ip.address
           - ip_without_cidr: i#.primary_ip.address // "" | sub("/[0-9]+"; "")
           # The 'default_key' builtin is provided to use a fallback key if the current value is None.
           - ansible_host: .primary_ip.address // "" | sub("/[0-9]+"; "")
@@ -101,8 +101,7 @@ netbox:
           - .device_role.name
           # - b#double
           # The tags keyword is special as it will create a group by tag and place an host in each of its corresponding groups.
-          - .tags
-
+          - l#.tags[]
 
       # racks:
       #   host_vars:
