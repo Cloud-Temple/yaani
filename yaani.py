@@ -19,122 +19,12 @@ import re
 from jsonschema import validate
 import pynetbox
 
+import pyjq
+
 # The name of the Environment variable where to find the path towards the
 # configuration file
 DEFAULT_ENV_CONFIG_FILE = "NETBOX_CONFIG_FILE"
 DEFAULT_MODULES_DIR = "modules"
-
-class KeyPathResolver:
-    class KeyPathTransformer(Transformer):
-        """The key path transformer is an AST visitor used to resolve expressions
-        in the configuration file.
-        """
-        DEFAULT_NS = 'i'
-
-        def __init__(self):
-            """The constructor of the transformer
-
-            Args:
-                build_ns (dict): Namespace containing variables declared at
-                    hostvars loading phase
-                import_ns (dict): Namespace containing variables returned by
-                    netbox
-                sub_import_ns (dict): Namespace containing variables declared
-                    at sub import phase
-            """
-            self._namespaces = {}
-
-        def record_namespace(self, key, namespace):
-            if key not in self._namespaces.keys():
-                self._namespaces[key] = namespace
-            else:
-                pass
-
-        def expr(self, n):
-            return n[0]
-
-        def key_path(self, n):
-            ns_selector = str(n[0])
-            # Select the proper namespace to browse through
-            try:
-                selected_ns = self._namespaces[ns_selector]
-            except KeyError:
-                sys.exist("Unknown namespace")
-
-            # Remove the namespace indication
-            keys_list = n[1:]
-            for key in keys_list:
-                if selected_ns is None:
-                    break
-                elif key in list(selected_ns.keys()):
-                    selected_ns = selected_ns[key]
-                elif key == 'ALL' and key is keys_list[-1]:
-                    break
-                else:
-                    sys.exit(
-                        "Error: The key solving failed "
-                        "in key_path '%s'" % (keys_list)
-                    )
-
-            return selected_ns
-
-        def sub(self, n):
-            if n[0] is None:
-                return None
-            data_str = str(n[0])
-            pattern = str(n[1]).strip("\"").strip("\'")
-            repl = str(n[2]).strip("\"").strip("\'")
-            if len(n) > 3:
-                return re.sub(
-                    pattern, repl, data_str,
-                    *list(map(lambda x: int(x), n[3:]))
-                )
-            return re.sub(pattern, repl, data_str)
-
-        def default_key(self, n):
-            if n[0] is None:
-                return n[1]
-            else:
-                return n[0]
-
-        def namespace(self, n):
-            if len(n):
-                return str(n[0])
-            return self.DEFAULT_NS
-
-    def __init__(self):
-        self._grammar = """
-            expr: sub
-                | default_key
-                | key_path
-
-            default_key: expr "|" "default_key" "(" key_path ")"
-
-            sub: expr "|" "sub" "(" STRING  "," STRING \
-                                    ["," NUMBER  ["," NUMBER ]] ")"
-
-            key_path: namespace KEY_NAME ("." KEY_NAME)*
-            namespace: ("<" NAMESPACES ">")?
-            KEY_NAME: /\\w+/
-            NAMESPACES: /[isb]/
-
-            %import common.ESCAPED_STRING   -> STRING
-            %import common.SIGNED_NUMBER    -> NUMBER
-            %import common.WS
-            %ignore WS
-        """
-        self._parser = Lark(
-            self._grammar, start="expr", parser='lalr'
-        )
-        self._namespaces = {}
-        self._transformer = self.KeyPathTransformer()
-
-    def record_namespace(self, key, namespace):
-        self._namespaces[key] = namespace
-        self._transformer.record_namespace(key, namespace)
-
-    def resolve(self, key_path):
-        return self._transformer.transform(self._parser.parse(key_path))
 
 
 class StackTransformer(Transformer):
@@ -143,8 +33,7 @@ class StackTransformer(Transformer):
     """
     def __init__(self, vars_definition,
                  api_connector,
-                 import_namespace,
-                 sub_import_namespace):
+                 namespaces):
         """Constructor of the stack transformer.
 
         Args:
@@ -158,8 +47,7 @@ class StackTransformer(Transformer):
         """
         self._api_connector = api_connector
         self._vars_definition = vars_definition
-        self._import_namespace = import_namespace
-        self._sub_import_namespace = sub_import_namespace
+        self._namespaces = namespaces
 
     def _import_var(self, parent_namespace, loading_var):
         # Access var configuration
@@ -179,11 +67,9 @@ class StackTransformer(Transformer):
         # Resolve the actual filter value
         # ex: "device_id": "id" --> "device_id": 123
         filter_args = {}
-        r = KeyPathResolver()
-        r.record_namespace("i", parent_namespace)
         for k, v in var_configuration['filter'].items():
             try:
-                filter_args[k] = r.resolve(v)
+                filter_args[k] = resolve_expression(v, parent_namespace)
             except KeyError:
                 sys.exit(
                     "The key given as a filter value '%s' does not exist." % v
@@ -217,8 +103,8 @@ class StackTransformer(Transformer):
         return n[0]
 
     def nested_path(self, n):
-        sub_pointer = [self._sub_import_namespace]
-        parent_ns = self._import_namespace
+        sub_pointer = [self._namespaces['sub-import']]
+        parent_ns = self._namespaces['import']
 
         for path in map(lambda x: str(x), n):
             l = []
@@ -233,7 +119,7 @@ class StackTransformer(Transformer):
             parent_ns = None
             sub_pointer = l
 
-        return self._sub_import_namespace
+        return self._namespaces
 
 
 class InventoryBuilder:
@@ -384,11 +270,8 @@ class InventoryBuilder:
                 sub_import=sub_import
             )
 
-    def _load_element_vars(self, element_name, inventory,
-                           host_vars,
-                           build_ns,
-                           import_ns,
-                           sub_import_ns):
+    def _load_element_vars(self, element_name, inventory, host_vars,
+                           namespaces):
         """Enrich build namespace with hostvars configuration.
         """
         # If there is no required host var to load, do nothing.
@@ -398,11 +281,9 @@ class InventoryBuilder:
             for d in host_vars:
                 for key, value in d.items():
                     try:
-                        build_ns[key] = self._resolve_expression(
+                        namespaces['build'][key] = self._resolve_expression(
                             key_path=value,
-                            build_ns=build_ns,
-                            import_ns=import_ns,
-                            sub_import_ns=sub_import_ns
+                            namespaces=namespaces
                         )
                     except KeyError:
                         sys.exit("Error: Key '%s' not found" % value)
@@ -410,11 +291,10 @@ class InventoryBuilder:
             # Add the loaded variables in the inventory under the proper
             # section (name of the host)
             inventory['_meta']['hostvars'].update(
-                {element_name: dict(build_ns)}
+                {element_name: dict(namespaces['build'])}
             )
 
-    def _execute_sub_import(self, sub_import, import_namespace,
-                            sub_import_namespace):
+    def _execute_sub_import(self, sub_import, namespaces):
         """Enrich sub import namespace with configured sub elements
         from netbox.
         """
@@ -429,8 +309,7 @@ class InventoryBuilder:
         t = StackTransformer(
             api_connector=self._nb,
             vars_definition=vars_definition,
-            import_namespace=import_namespace,
-            sub_import_namespace=sub_import_namespace
+            namespaces=namespaces
         )
         return t.transform(self._stack_parser.parse(stack_string))
 
@@ -438,26 +317,26 @@ class InventoryBuilder:
                                   obj_type, group_by=None, group_prefix=None,
                                   host_vars=None, sub_import=[]):
         # Declare namespaces
-        build_namespace = {}
-        import_namespace = dict(host_dict)
-        sub_import_namespace = {}
+        namespaces = {
+            "import": dict(host_dict),
+            "build": {},
+            "sub-import": {}
+
+        }
 
         # Handle sub imports
         for imports in sub_import:
             self._execute_sub_import(
-                imports,
-                import_namespace,
-                sub_import_namespace
+                sub_import=imports,
+                namespaces=namespaces
             )
 
         # Load the host vars in the inventory
         self._load_element_vars(
-            element_index,
-            inventory,
-            host_vars,
-            build_namespace,
-            import_namespace,
-            sub_import_namespace
+            element_name=element_index,
+            inventory=inventory,
+            host_vars=host_vars,
+            namespaces=namespaces
         )
         # Add the host to its main type group (devices, racks, etc.)
         # and to the group 'all'
@@ -474,41 +353,73 @@ class InventoryBuilder:
         if group_by:
             # Iterate over every groups
             for group in group_by:
-                # The 'tags' field is a list, a second iteration must be
-                # performed at a deeper level
-                if group == 'tags':
-                    # Iterate over every tag
-                    for tag in host_dict.get(group):
-                        # Add the optional prefix
-                        if group_prefix is None:
-                            group_name = tag
-                        else:
-                            group_name = group_prefix + tag
-                        # Insert the element in the propper group
-                        self._add_element_to_group(
-                            element_name=element_index,
-                            group_name=group_name,
-                            inventory=inventory
-                        )
-                else:
-                    # Check that the specified group points towards an
-                    # actual value
-                    group_name = self._resolve_expression(
-                        key_path=group,
-                        build_ns=build_namespace,
-                        import_ns=import_namespace,
-                        sub_import_ns=sub_import_namespace
-                    )
-                    if group_name is not None:
+                # Check that the specified group points towards an
+                # actual value
+                computed_group = self._resolve_expression(
+                    key_path=group,
+                    namespaces=namespaces
+                )
+                if computed_group is not None:
+                    if type(computed_group) is list:
+                        # Iterate over every tag
+                        for value in computed_group:
+                            # Add the optional prefix
+                            if group_prefix is None:
+                                group_name = value
+                            else:
+                                group_name = group_prefix + value
+                            # Insert the element in the propper group
+                            self._add_element_to_group(
+                                element_name=element_index,
+                                group_name=group_name,
+                                inventory=inventory
+                            )
+                    else:
                         # Add the optional prefix
                         if group_prefix:
-                            group_name = group_prefix + group_name
+                            group_name = group_prefix + computed_group
+                        else:
+                            group_name = computed_group
                         # Insert the element in the propper group
                         self._add_element_to_group(
                             element_name=element_index,
                             group_name=group_name,
                             inventory=inventory
                         )
+
+    def _resolve_expression(self, key_path, namespaces):
+        """Resolve the given key path to a value.
+
+        Args:
+            key_path (str): The path toward the key
+            build_ns (dict): The namespace corresponding build phase
+            import_ns (dict): The namespace corresponding import phase
+            sub_import_ns (dict): The namespace corresponding sub-import phase
+
+        Returns:
+            The target value
+        """
+        ns_select = {
+            "b": "build",
+            "i": "import",
+            "s": "sub-import"
+        }
+
+        s = key_path.split("#")
+        if len(s) > 1:
+            ns = namespaces[ns_select[s[0]]]
+        else:
+            ns = namespaces["import"]
+
+        r = resolve_expression(s[-1], ns)
+        if len(r) == 1:
+            return r[0]
+        return r
+
+    def _add_element_to_group(self, element_name, group_name, inventory):
+        self._initialize_group(group_name=group_name, inventory=inventory)
+        if element_name not in inventory.get(group_name).get('hosts'):
+            inventory[group_name]['hosts'].append(element_name)
 
     def _get_elements_list(self, application, object_type,
                            filters=None, specific_host=None):
@@ -539,11 +450,6 @@ class InventoryBuilder:
             result = endpoint.all()
 
         return result
-
-    def _add_element_to_group(self, element_name, group_name, inventory):
-        self._initialize_group(group_name=group_name, inventory=inventory)
-        if element_name not in inventory.get(group_name).get('hosts'):
-            inventory[group_name]['hosts'].append(element_name)
 
     def _get_identifier(self, host, obj_type):
         """Return an identifier for the given host.
@@ -577,25 +483,6 @@ class InventoryBuilder:
         # Initialize the host field of the group
         inventory[group_name].setdefault('hosts', [])
         return inventory
-
-    def _resolve_expression(self, key_path,
-                            build_ns, import_ns, sub_import_ns):
-        """Resolve the given key path to a value.
-
-        Args:
-            key_path (str): The path toward the key
-            build_ns (dict): The namespace corresponding build phase
-            import_ns (dict): The namespace corresponding import phase
-            sub_import_ns (dict): The namespace corresponding sub-import phase
-
-        Returns:
-            The target value
-        """
-        r = KeyPathResolver()
-        r.record_namespace("b", build_ns)
-        r.record_namespace("i", import_ns)
-        r.record_namespace("s", sub_import_ns)
-        return r.resolve(key_path)
 
 
 def parse_cli_args(script_args):
@@ -692,10 +579,13 @@ def validate_configuration(configuration):
         "title": "Configuration file",
         "description": "The configuration file of the dynamic inventory",
         "type": "object",
+        "required": ["netbox"],
         "properties": {
             "netbox": {
                 "type": "object",
                 "description": "The base key of the configuration file",
+                "required": ["api"],
+                "additionalProperties": False,
                 "properties": {
                     "api": {
                         "type": "object",
@@ -704,6 +594,7 @@ def validate_configuration(configuration):
                             "to connect to netbox api"
                         ),
                         "additionalProperties": False,
+                        "required": ["url"],
                         "properties": {
                             "url": {
                                 "type": "string",
@@ -728,7 +619,6 @@ def validate_configuration(configuration):
                                 )
                             }
                         },
-                        "required": ["url"],
                         "allOf": [
                             {
                                 "not": {
@@ -805,11 +695,9 @@ def validate_configuration(configuration):
                             }
                         }
                     }
-                },
-                "required": ["api"]
+                }
             }
-        },
-        "required": ["netbox"]
+        }
     }
 
     return validate(instance=configuration, schema=config_schema)
@@ -848,6 +736,10 @@ def dump_json_inventory(inventory):
     print(json.dumps(inventory))
 
 
+def resolve_expression(query, namespace):
+    return pyjq.all(query, namespace)
+
+
 def render_inventory(render_configuration, inventory):
     if render_configuration:
         func_array = []
@@ -868,7 +760,8 @@ def render_inventory(render_configuration, inventory):
                 custom_module = importlib.import_module(module_name)
             except ImportError:
                 sys.exit(
-                    "The custom module %s could not be imported" % (module_name)
+                    "The custom module %s could not be "
+                    "imported" % (module_name)
                 )
 
             try:
