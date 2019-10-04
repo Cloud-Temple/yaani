@@ -51,15 +51,12 @@ def test_data():
     (".e.e_a | sub(\"value\";\"\")", ["test "]),  # sub on non null value
     (".d // \"_\"| sub(\"value\";\"\")", ["_"]),  # sub non null value
     (".l[] | sub(\"2\";\"\")", ["1", "", "3"]),  # sub on list value
-    # ----------------------------------------------------------------
     (".l2[].a1", ["b1", "b2", "b3"]),  # expand list
-    # ("d | sub(\"value\",\"\")", None),  # sub non null value
-    # ("d | sub(\"value\",\"\")", None),  # sub non null value
-    # ("d | sub(\"value\",\"\")", None),  # sub non null value
-    # ("d | sub(\"value\",\"\")", None),  # sub non null value
+    (".l2[].a1 | sub(\"b\"; \"c\")", ["c1", "c2", "c3"]),  # expand list and sub
+
 ])
-def test_expr_reso_grammar_ok(kpr, test_data, arg, exp):
-    assert kpr.resolve(arg, test_data) == exp
+def test_expr_reso_grammar_ok(test_data, arg, exp):
+    assert resolve_expression(arg, test_data) == exp
 
 @pytest.mark.parametrize("args,exp", [
     (['-c', 'test.yml', '--list'], {  # config file plus list
