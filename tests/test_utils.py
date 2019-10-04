@@ -133,6 +133,14 @@ def test_validate_configuration_ok(arg):
         }
     }),
     ({
+        "var1": {
+            "api": {
+                "url": "var1",
+                "extra": True  # extra key
+            }
+        }
+    }),
+    ({
         "netbox": {
             "api": {
                 "url": "http://test.com",
