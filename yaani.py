@@ -31,19 +31,15 @@ class StackTransformer(Transformer):
     """Provides an AST visitor. It is used to implement the feature of
     importing from netbox sub-elements joined together by certain parameters.
     """
-    def __init__(self, vars_definition,
-                 api_connector,
-                 namespaces):
+    def __init__(self, vars_definition, api_connector, namespaces):
         """Constructor of the stack transformer.
 
         Args:
             vars_definition (dict): The dict containing the definition
                 of the vars referenced in the stack string
             api_connector (pynetbox.api): The connector to the netbox api
-            import_namespace (dict): Namespace containing the vars from netbox
-                for the current host
-            sub_import_namespace (dict): Namespace containing the vars declared
                 in the sub-import section.
+            namespaces (dict): The namespaces used to resolve sub-imports
         """
         self._api_connector = api_connector
         self._vars_definition = vars_definition
@@ -61,15 +57,29 @@ class StackTransformer(Transformer):
             )
 
         # Access netbox API endpoint of wanted object
-        app = getattr(self._api_connector, var_configuration['application'])
-        endpoint = getattr(app, var_configuration['type'])
+        try:
+            app = getattr(
+                self._api_connector,
+                var_configuration['application']
+            )
+            endpoint = getattr(app, var_configuration['type'])
+        except AttributeError:
+            sys.exit(
+                "The netbox api endpoint %s/%s/ "
+                "cannot be found" % (
+                    var_configuration['application'],
+                    var_configuration['type']
+                )
+            )
 
         # Resolve the actual filter value
         # ex: "device_id": "id" --> "device_id": 123
         filter_args = {}
         for k, v in var_configuration['filter'].items():
             try:
-                filter_args[k] = resolve_expression(v, parent_namespace)
+                filter_args[k] = resolve_expression(
+                    v, parent_namespace, first=True
+                )
             except KeyError:
                 sys.exit(
                     "The key given as a filter value '%s' does not exist." % v
@@ -124,20 +134,6 @@ class StackTransformer(Transformer):
 
 class InventoryBuilder:
     """Inventory Builder is the object that builds and return the inventory.
-
-    Attributes:
-        config_api (dict): The configuration of the api section
-        config_data (dict): The configuration parsed from the configuration
-                            file
-        config_file (str): The path of thge configuration file
-        host (str): The hostname if specified, None else
-        imports (list): The list of import statements in the configuration file
-        key_path_parser (Lark): The parser used to parse expressions in the
-            configuration file
-        list_mode (bool): The value of --list option
-        nb (pynetbox.api): The netbox api connector
-        stack_parser (Lark): The parser used to parse the stack string
-
     """
     def __init__(self, script_args, script_config):
         # Script args
@@ -348,6 +344,16 @@ class InventoryBuilder:
             element_name=element_index, group_name='all', inventory=inventory
         )
 
+        self._execute_group_by(
+            element_index=element_index,
+            group_by=group_by,
+            group_prefix=group_prefix,
+            inventory=inventory,
+            namespaces=namespaces
+        )
+
+    def _execute_group_by(self, element_index, group_by, group_prefix,
+                          inventory, namespaces):
         # If the group_by option is specified, insert the element in the
         # propper groups.
         if group_by:
@@ -405,15 +411,23 @@ class InventoryBuilder:
             "s": "sub-import"
         }
 
+        first = True
+        ns = None
+
         s = key_path.split("#")
+        # Check if there are command letters
         if len(s) > 1:
-            ns = namespaces[ns_select[s[0]]]
-        else:
+            # For each letter in the command, activate the proper options
+            for cmd in s[0]:
+                if cmd in list(ns_select.keys()):
+                    ns = namespaces[ns_select[cmd]]
+                elif cmd == 'l':
+                    first = False
+        # If the namespace was not defined, set it to default
+        if ns is None:
             ns = namespaces["import"]
 
-        r = resolve_expression(s[-1], ns)
-        if len(r) == 1:
-            return r[0]
+        r = resolve_expression(s[-1], ns, first)
         return r
 
     def _add_element_to_group(self, element_name, group_name, inventory):
@@ -435,8 +449,20 @@ class InventoryBuilder:
             specific_host (str, optional): The name of a specific host which
                 host vars must be returned alone.
         """
-        app_obj = getattr(self._nb, application)
-        endpoint = getattr(app_obj, object_type)
+        try:
+            app_obj = getattr(
+                self._nb,
+                application
+            )
+            endpoint = getattr(app_obj, object_type)
+        except AttributeError:
+            sys.exit(
+                "The netbox api endpoint %s/%s/ "
+                "cannot be found" % (
+                    application,
+                    object_type
+                )
+            )
 
         # specific host handling
         if specific_host is not None:
@@ -736,7 +762,9 @@ def dump_json_inventory(inventory):
     print(json.dumps(inventory))
 
 
-def resolve_expression(query, namespace):
+def resolve_expression(query, namespace, first):
+    if first:
+        return pyjq.first(query, namespace)
     return pyjq.all(query, namespace)
 
 
