@@ -488,11 +488,17 @@ class InventoryBuilder:
             str: The computed id
         """
         # Get the 'name' field value of the specified host
-        r = host.get('name')
+        r = host.get('name', None)
         # If the 'name' field is empty, compute the id :
         #   <object type>_<id in netbox db>
         if r is None or r == "":
-            r = "%s_%s" % (obj_type, host.get('id'))
+            try:
+                r = "%s_%s" % (obj_type, host['id'])
+            except KeyError:
+                sys.exit(
+                    "The id key is not present in an unnamed host. Generic "
+                    "identifier cannot be computed"
+                )
         return r
 
     def _initialize_group(self, group_name, inventory):
