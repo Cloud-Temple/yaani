@@ -5,7 +5,7 @@ netbox:
     # (see https://pynetbox.readthedocs.io/en/latest/index.html for more information)
 
     # This key is mandatory
-    url: "http://netbox.cloud-temple.lan/"
+    url: "http://netbox.example.lan/"
 
     # The followings are optional
     # token: "<Netbox token>"
