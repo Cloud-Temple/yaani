@@ -39,24 +39,38 @@ def test_data():
     }
 
 
-@pytest.mark.parametrize("arg, exp", [
-    (".a", [1]),  # regular key
-    (".b", [2]),  # regular key
-    (".c", [3]),  # regular key
-    (".d", [None]),  # regular key with None value
-    (".e", [{"e_a": "test value"}]),  # regular key with dict value
-    (".e.e_a", ["test value"]),  # key in a dict
-    (".a // \"b\"", [1]),  # default_key test on non null value
-    (".d // \"b\"", ["b"]),  # default_key test on null value
-    (".e.e_a | sub(\"value\";\"\")", ["test "]),  # sub on non null value
-    (".d // \"_\"| sub(\"value\";\"\")", ["_"]),  # sub non null value
-    (".l[] | sub(\"2\";\"\")", ["1", "", "3"]),  # sub on list value
-    (".l2[].a1", ["b1", "b2", "b3"]),  # expand list
-    (".l2[].a1 | sub(\"b\"; \"c\")", ["c1", "c2", "c3"]),  # expand list and sub
-
+@pytest.mark.parametrize("arg, first, exp", [
+    (".a", False, [1]),  # regular key
+    (".b", False, [2]),  # regular key
+    (".c", False, [3]),  # regular key
+    (".d", False, [None]),  # regular key with None value
+    (".e", False, [{"e_a": "test value"}]),  # regular key with dict value
+    (".e.e_a", False, ["test value"]),  # key in a dict
+    (".a // \"b\"", False, [1]),  # default_key test on non null value
+    (".d // \"b\"", False, ["b"]),  # default_key test on null value
+    (".e.e_a | sub(\"value\";\"\")", False, ["test "]),  # sub on non null value
+    (".d // \"_\"| sub(\"value\";\"\")", False, ["_"]),  # sub non null value
+    (".l[] | sub(\"2\";\"\")", False, ["1", "", "3"]),  # sub on list value
+    (".l2[].a1", False, ["b1", "b2", "b3"]),  # expand list
+    (".l2[].a1 | sub(\"b\"; \"c\")", False, ["c1", "c2", "c3"]),  # expand list and sub
+    (".a", True, 1),  # regular key
+    (".b", True, 2),  # regular key
+    (".c", True, 3),  # regular key
+    (".d", True, None),  # regular key with None value
+    (".e", True, {"e_a": "test value"}),  # regular key with dict value
+    (".e.e_a", True, "test value"),  # key in a dict
+    (".a // \"b\"", True, 1),  # default_key test on non null value
+    (".d // \"b\"", True, "b"),  # default_key test on null value
+    (".e.e_a | sub(\"value\";\"\")", True, "test "),  # sub on non null value
+    (".d // \"_\"| sub(\"value\";\"\")", True, "_"),  # sub non null value
+    (".l[] | sub(\"2\";\"\")", True, "1"),  # sub on list value
+    (".l2[].a1", True, "b1"),  # expand list
+    (".l2[].a1 | sub(\"b\"; \"c\")", True, "c1"),  # expand list and sub
 ])
-def test_expr_reso_grammar_ok(test_data, arg, exp):
-    assert resolve_expression(arg, test_data) == exp
+def test_expr_reso_grammar_ok(test_data, arg, first, exp):
+    """Test expression resolution through pyjq"""
+    assert resolve_expression(arg, test_data, first) == exp
+
 
 @pytest.mark.parametrize("args,exp", [
     (['-c', 'test.yml', '--list'], {  # config file plus list
