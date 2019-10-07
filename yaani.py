@@ -434,6 +434,7 @@ class InventoryBuilder:
         self._initialize_group(group_name=group_name, inventory=inventory)
         if element_name not in inventory.get(group_name).get('hosts'):
             inventory[group_name]['hosts'].append(element_name)
+        return inventory
 
     def _get_elements_list(self, application, object_type,
                            filters=None, specific_host=None):
