@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-
 from __future__ import absolute_import
 
+from functools import reduce
+import logging
 import argparse
 import sys
 import os
 import yaml
+import importlib
 try:
     import json
 except ImportError:
@@ -17,101 +19,147 @@ import re
 from jsonschema import validate
 import pynetbox
 
+import pyjq
+
 # The name of the Environment variable where to find the path towards the
 # configuration file
 DEFAULT_ENV_CONFIG_FILE = "NETBOX_CONFIG_FILE"
+DEFAULT_MODULES_DIR = "modules"
 
 
-class Transformer(Transformer):
-    """The transformer to apply to tree of type System"""
-    def __init__(self, data):
-        self.data = data
+class StackTransformer(Transformer):
+    """Provides an AST visitor. It is used to implement the feature of
+    importing from netbox sub-elements joined together by certain parameters.
+    """
+    def __init__(self, vars_definition, api_connector, namespaces):
+        """Constructor of the stack transformer.
 
-    def expr(self, n):
+        Args:
+            vars_definition (dict): The dict containing the definition
+                of the vars referenced in the stack string
+            api_connector (pynetbox.api): The connector to the netbox api
+                in the sub-import section.
+            namespaces (dict): The namespaces used to resolve sub-imports
+        """
+        self._api_connector = api_connector
+        self._vars_definition = vars_definition
+        self._namespaces = namespaces
+
+    def _import_var(self, parent_namespace, loading_var):
+        # Access var configuration
+        try:
+            var_configuration = self._vars_definition[loading_var]
+        except KeyError:
+            # The var is not declared, exit program.
+            sys.exit(
+                "Bad key %s in sub-import section. Variable not defined in "
+                "sub_import.vars section." % loading_var
+            )
+
+        # Access netbox API endpoint of wanted object
+        try:
+            app = getattr(
+                self._api_connector,
+                var_configuration['application']
+            )
+            endpoint = getattr(app, var_configuration['type'])
+        except AttributeError:
+            sys.exit(
+                "The netbox api endpoint %s/%s/ "
+                "cannot be found" % (
+                    var_configuration['application'],
+                    var_configuration['type']
+                )
+            )
+
+        # Resolve the actual filter value
+        # ex: "device_id": "id" --> "device_id": 123
+        filter_args = {}
+        for k, v in var_configuration['filter'].items():
+            try:
+                filter_args[k] = resolve_expression(
+                    v, parent_namespace, first=True
+                )
+            except KeyError:
+                sys.exit(
+                    "The key given as a filter value '%s' does not exist." % v
+                )
+
+        # fetch sub elements from netbox
+        if "id" in list(filter_args.keys()):
+            elements = [endpoint.get(filter_args.get("id"))]
+        else:
+            elements = endpoint.filter(**filter_args)
+
+        # Set the name of the key that will be used for index
+        index_key_name = var_configuration['index']
+
+        ret = {}
+        for e in elements:
+            # Resolve the actual index value
+            index_value = getattr(e, index_key_name)
+
+            if index_value in list(ret.keys()):
+                # The index key must lead to a unique value, avoid duplicate
+                # e[index_key] must be unique
+                sys.exit(
+                    "The key '%s', specified as an index key, is resolved to "
+                    "non unique values." % index_value
+                )
+            ret[index_value] = dict(e)
+        return ret
+
+    def stack(self, n):
         return n[0]
 
-    def key_path(self, n):
-        pointer = self.data
-        for key in n:
-            try:
-                if key in list(pointer.keys()):
-                    pointer = pointer[key]
-                else:
-                    sys.exit(
-                        "Error: The key solving failed "
-                        "in key_path '%s'" % (key_path)
-                    )
-            except AttributeError:
-                return None
+    def nested_path(self, n):
+        sub_pointer = [self._namespaces['sub-import']]
+        parent_ns = self._namespaces['import']
 
-        return pointer
+        for path in map(lambda x: str(x), n):
+            l = []
+            for v in sub_pointer:
+                if parent_ns is None:
+                    parent_ns = v
+                v[path] = self._import_var(
+                    parent_namespace=parent_ns,
+                    loading_var=path
+                )
+                l += list(v[path].values())
+            parent_ns = None
+            sub_pointer = l
 
-    def sub(self, n):
-        if n[0] is None:
-            return None
-        data_str = str(n[0])
-        pattern = str(n[1]).strip("\"").strip("\'")
-        repl = str(n[2]).strip("\"").strip("\'")
-        if len(n) > 3:
-            return re.sub(
-                pattern, repl, data_str,
-                *list(map(lambda x: int(x), n[3:]))
-            )
-        return re.sub(pattern, repl, data_str)
-
-    def default_key(self, n):
-        if n[0] is None:
-            return n[1]
-        else:
-            return n[0]
+        return self._namespaces
 
 
 class InventoryBuilder:
     """Inventory Builder is the object that builds and return the inventory.
-
-    Attributes:
-        config_api (dict): The configuration of the api section
-        config_data (dict): The configuration parsed from the configuration
-                            file
-        config_file (str): The path of thge configuration file
-        host (str): The hostname if specified, None else
-        imports (list): The list of import statements in the configuration file
-        list_mode (bool): The value of --list option
-        parser (Lark): The parser used to parse custom expressions.
     """
-
     def __init__(self, script_args, script_config):
         # Script args
-        self.config_file = script_args.config_file
-        self.host = script_args.host
-        self.list_mode = script_args.list
+        self._config_file = script_args.config_file
+        self._host = script_args.host
+        self._list_mode = script_args.list
 
         # Configuration file
-        self.config_data = script_config['netbox']
-        self.config_api = self.config_data['api']
-        self.imports = self.config_data.get('import', None)
+        self._config_data = script_config['netbox']
+        self._config_api = self._config_data['api']
+        self._import_section = self._config_data.get('import', None)
+
+        # Create the api connector
+        self._nb = pynetbox.api(**self._config_api)
+
         # Expression resolutions objects
-        grammar = """
-            expr: sub
-                | default_key
-                | key_path
 
-            default_key: expr "|" "default_key" "(" key_path ")"
+        stack_grammar = """
+            stack: nested_path
 
-            sub: expr "|" "sub" "(" STRING  "," STRING \
-                                    ["," NUMBER  ["," NUMBER ]] ")"
-
-            key_path: KEY_NAME ("." KEY_NAME)*
-            KEY_NAME: /[_a-zA-Z0-9]+/
-
-            %import common.ESCAPED_STRING   -> STRING
-            %import common.SIGNED_NUMBER    -> NUMBER
-            %import common.WS
-            %ignore WS
+            nested_path: VAR ("." VAR)*
+            VAR: /\\w+/
         """
 
-        self.parser = Lark(
-            grammar, start="expr", parser='lalr'
+        self._stack_parser = Lark(
+            stack_grammar, start="stack",
         )
 
     def _init_inventory(self):
@@ -119,86 +167,48 @@ class InventoryBuilder:
 
     def build_inventory(self):
         """Build and return the inventory dict.
-        The inventory respects the following principles :
-          - When the script is called with the single argument --list, the
-            script must output to stdout a JSON-encoded hash or dictionary
-            containing all of the groups to be managed. Each group’s value
-            should be either a hash or dictionary containing a list of each
-            host, any child groups, and potential group variables,
-            or simply a list of hosts:
-
-            {
-                "group001": {
-                    "hosts": ["host001", "host002"],
-                    "vars": {
-                        "var1": true
-                    },
-                    "children": ["group002"]
-                },
-                "group002": {
-                    "hosts": ["host003","host004"],
-                    "vars": {
-                        "var2": 500
-                    },
-                    "children":[]
-                }
-
-            }
-
-          - If any of the elements of a group are empty they may be omitted
-            from the output.
-          - When called with the argument --host <hostname> (where <hostname>
-            is a host from above), the script must print either an empty JSON
-            hash/dictionary, or a hash/dictionary of variables to make
-            available to templates and playbooks. For example:
-
-            {
-                "VAR001": "VALUE",
-                "VAR002": "VALUE",
-            }
-            -------------------------------------
-          - FIXME: COMPLETE COMMENTS
 
         Returns:
             dict: The inventory
         """
-        # If the list mode is specified, return a complete inventory
-        if self.list_mode:
-            inventory = self._init_inventory()
+        # Check if both mode are deactivated
+        if not self._list_mode and not self._host:
+            return {}
 
-            # Check whether the import section exists.
-            # If it exists, iterate over each statement, else, execute default
-            # behaviour.
-            if self.imports:
-                # For each application, iterate over all inner object types
-                for app_name, app_import in list(self.imports.items()):
-                    for type_key, import_statement in app_import.items():
-                        self._execute_import(
-                            application=app_name,
-                            import_type=type_key,
-                            import_options=import_statement,
-                            inventory=inventory
-                        )
+        inventory = self._init_inventory()
+
+        if self._list_mode:
+
+            if self._import_section:
+                # Check whether the import section exists.
+                iterator = self._import_section
             else:
-                # Execute default behaviour:
-                #   -> get all devices and handle no grouping option
-                self._execute_import(
-                    application='dcim',
-                    import_type='devices',
-                    import_options={},
-                    inventory=inventory
-                )
+                # Set the default behaviour args
+                iterator = {
+                    "dcim": {
+                        "devices": {}
+                    }
+                }
+
+            # For each application, iterate over all inner object types
+            for app_name, app_import in list(self._import_section.items()):
+                for type_key, import_statement in app_import.items():
+                    self._execute_import(
+                        application=app_name,
+                        import_type=type_key,
+                        import_options=import_statement,
+                        inventory=inventory
+                    )
 
             return inventory
-        # If a host name is specified, return the inventory filled with only
-        # its information
-        elif self.host:
-            inventory = self._init_inventory()
-
-            # A host is considered to be a device. Check if devices import
-            # options are set.
+        else:
+            # The host mode is on:
+            #   If a host name is specified, return the inventory filled with
+            #   only its information.
+            #   A host is considered to be a device. Check if devices import
+            #   options are set.
             device_import_options = (
-                self.imports
+                self._import_section
                 .get('dcim', {})
                 .get('devices', {})
             )
@@ -210,10 +220,7 @@ class InventoryBuilder:
                 inventory=inventory
             )
 
-            return inventory['_meta']['hostvars'].get(self.host, {})
-        #  If none of the list or host options is set, return an empty dict
-        else:
-            return {}
+            return inventory['_meta']['hostvars'].get(self._host, {})
 
     def _execute_import(self, application, import_type,
                         import_options, inventory):
@@ -227,43 +234,52 @@ class InventoryBuilder:
             inventory (dict): The inventory in which the information must be
                 added.
         """
+        # Access vars in config
+        filters = import_options.get("filters", None)
+        group_by = import_options.get('group_by', None)
+        group_prefix = import_options.get('group_prefix', None)
+        host_vars_section = import_options.get('host_vars', [])
+        sub_import = import_options.get('sub_import', [])
+
         # Fetch the list of entities from Netbox
         netbox_hosts_list = self._get_elements_list(
-            application, import_type,
-            filters=import_options.get('filters', None),
-            specific_host=self.host
+            application,
+            import_type,
+            filters=filters,
+            specific_host=self._host
         )
 
         # If the netbox hosts list fetching was successful, add the elements to
         # the inventory.
-        if netbox_hosts_list:
-            for host in netbox_hosts_list:
-                # Compute an id for the given host data
-                element_name = self._get_identifier(dict(host), import_type)
-                # Add the element to the propper group(s)
-                self._add_element_to_inventory(
-                    element_name, dict(host), inventory, import_type,
-                    import_options.get('group_by', None),
-                    import_options.get('group_prefix', None),
-                    import_options.get('host_vars', None)
-                )
+        for host in netbox_hosts_list:
+            # Compute an id for the given host data
+            element_index = self._get_identifier(dict(host), import_type)
+            # Add the element to the propper group(s)
+            self._add_element_to_inventory(
+                element_index=element_index,
+                host_dict=dict(host),
+                inventory=inventory,
+                obj_type=import_type,
+                group_by=group_by,
+                group_prefix=group_prefix,
+                host_vars=host_vars_section,
+                sub_import=sub_import
+            )
 
-    def _load_element_vars(self, element_name, host,
-                           inventory, host_vars=None):
-        # If there is no required host var to load, end here.
+    def _load_element_vars(self, element_name, inventory, host_vars,
+                           namespaces):
+        """Enrich build namespace with hostvars configuration.
+        """
+        # If there is no required host var to load, do nothing.
         if host_vars:
-            host_data = {}
             # Iterate over every key value pairs in host_vars required in
             # config file
-            for key, value in host_vars.items():
-                # Set the name of the key
-                if value == 'ALL':
-                    host_data[key] = host
-                else:
+            for d in host_vars:
+                for key, value in d.items():
                     try:
-                        host_data[key] = self._resolve_expression(
+                        namespaces['build'][key] = self._resolve_expression(
                             key_path=value,
-                            data=host
+                            namespaces=namespaces
                         )
                     except KeyError:
                         sys.exit("Error: Key '%s' not found" % value)
@@ -271,80 +287,153 @@ class InventoryBuilder:
             # Add the loaded variables in the inventory under the proper
             # section (name of the host)
             inventory['_meta']['hostvars'].update(
-                {element_name: host_data}
+                {element_name: dict(namespaces['build'])}
             )
 
-    def _add_element_to_inventory(self, element_name, host, inventory,
-                                  obj_type, group_by=None, group_prefix=None,
-                                  host_vars=None):
-        """Insert the given element in the propper groups.
-
-        Args:
-            element_name (str): The name of the element
-            host (dict): The actual data of the element
-            inventory (dict): The inventory in which the element must be
-                inserted.
-            obj_type (str): The type of the element
-            group_by (list, optional): The list of group ot create and to add
-                the element to.
-            group_prefix (str, optional): An optional prefix to add in front
-                of group names that will be created.
+    def _execute_sub_import(self, sub_import, namespaces):
+        """Enrich sub import namespace with configured sub elements
+        from netbox.
         """
+        # Extract stack string
+        stack_string = sub_import['stack']
+
+        # Extract vars definition
+        vars_definition = {}
+        for i in sub_import['vars']:
+            vars_definition.update(i)
+
+        t = StackTransformer(
+            api_connector=self._nb,
+            vars_definition=vars_definition,
+            namespaces=namespaces
+        )
+        return t.transform(self._stack_parser.parse(stack_string))
+
+    def _add_element_to_inventory(self, element_index, host_dict, inventory,
+                                  obj_type, group_by=None, group_prefix=None,
+                                  host_vars=None, sub_import=[]):
+        # Declare namespaces
+        namespaces = {
+            "import": dict(host_dict),
+            "build": {},
+            "sub-import": {}
+
+        }
+
+        # Handle sub imports
+        for imports in sub_import:
+            self._execute_sub_import(
+                sub_import=imports,
+                namespaces=namespaces
+            )
+
+        # Load the host vars in the inventory
+        self._load_element_vars(
+            element_name=element_index,
+            inventory=inventory,
+            host_vars=host_vars,
+            namespaces=namespaces
+        )
+        # Add the host to its main type group (devices, racks, etc.)
+        # and to the group 'all'
+        self._add_element_to_group(
+            element_name=element_index, group_name=obj_type,
+            inventory=inventory
+        )
+        self._add_element_to_group(
+            element_name=element_index, group_name='all', inventory=inventory
+        )
+
+        self._execute_group_by(
+            element_index=element_index,
+            group_by=group_by,
+            group_prefix=group_prefix,
+            inventory=inventory,
+            namespaces=namespaces
+        )
+
+    def _execute_group_by(self, element_index, group_by, group_prefix,
+                          inventory, namespaces):
         # If the group_by option is specified, insert the element in the
         # propper groups.
         if group_by:
             # Iterate over every groups
             for group in group_by:
-                # Check that the specified group points towards an actual value
-                if (
-                    self._resolve_expression(key_path=group, data=host)
-                    is not None
-                ):
-                    # The 'tags' field is a list, a second iteration must be
-                    # performed at a deeper level
-                    if group == 'tags':
+                # Check that the specified group points towards an
+                # actual value
+                computed_group = self._resolve_expression(
+                    key_path=group,
+                    namespaces=namespaces
+                )
+                if computed_group is not None:
+                    if type(computed_group) is list:
                         # Iterate over every tag
-                        for tag in host.get(group):
-                            group_name = tag
+                        for value in computed_group:
                             # Add the optional prefix
-                            if group_prefix is not None:
-                                group_name = group_prefix + group_name
+                            if group_prefix is None:
+                                group_name = value
+                            else:
+                                group_name = group_prefix + value
                             # Insert the element in the propper group
                             self._add_element_to_group(
-                                element_name=element_name,
+                                element_name=element_index,
                                 group_name=group_name,
                                 inventory=inventory
                             )
                     else:
-                        # Check that the specified group points towards an
-                        # actual value
-                        group_name = self._resolve_expression(
-                            key_path=group, data=host
-                        )
                         # Add the optional prefix
                         if group_prefix:
-                            group_name = group_prefix + group_name
+                            group_name = group_prefix + computed_group
+                        else:
+                            group_name = computed_group
                         # Insert the element in the propper group
                         self._add_element_to_group(
-                            element_name=element_name,
+                            element_name=element_index,
                             group_name=group_name,
                             inventory=inventory
                         )
-        # Anyway, add the host to its main type group ( evices, racks, etc.)
-        # and to the group 'all'
-        self._add_element_to_group(
-            element_name=element_name, group_name=obj_type, inventory=inventory
-        )
-        self._add_element_to_group(
-            element_name=element_name, group_name='all', inventory=inventory
-        )
 
-        # Load the host vars in the inventory
-        self._load_element_vars(
-            element_name, host,
-            inventory,
-            host_vars
-        )
+    def _resolve_expression(self, key_path, namespaces):
+        """Resolve the given key path to a value.
+
+        Args:
+            key_path (str): The path toward the key
+            build_ns (dict): The namespace corresponding build phase
+            import_ns (dict): The namespace corresponding import phase
+            sub_import_ns (dict): The namespace corresponding sub-import phase
+
+        Returns:
+            The target value
+        """
+        ns_select = {
+            "b": "build",
+            "i": "import",
+            "s": "sub-import"
+        }
+
+        first = True
+        ns = None
+
+        s = key_path.split("#")
+        # Check if there are command letters
+        if len(s) > 1:
+            # For each letter in the command, activate the proper options
+            for cmd in s[0]:
+                if cmd in list(ns_select.keys()):
+                    ns = namespaces[ns_select[cmd]]
+                elif cmd == 'l':
+                    first = False
+        # If the namespace was not defined, set it to default
+        if ns is None:
+            ns = namespaces["import"]
+
+        r = resolve_expression(s[-1], ns, first)
+        return r
+
+    def _add_element_to_group(self, element_name, group_name, inventory):
+        self._initialize_group(group_name=group_name, inventory=inventory)
+        if element_name not in inventory.get(group_name).get('hosts'):
+            inventory[group_name]['hosts'].append(element_name)
 
     def _get_elements_list(self, application, object_type,
                            filters=None, specific_host=None):
@@ -360,28 +449,33 @@ class InventoryBuilder:
             specific_host (str, optional): The name of a specific host which
                 host vars must be returned alone.
         """
-        nb = pynetbox.api(**self.config_api)
-
-        app_obj = getattr(nb, application)
-        endpoint = getattr(app_obj, object_type)
+        try:
+            app_obj = getattr(
+                self._nb,
+                application
+            )
+            endpoint = getattr(app_obj, object_type)
+        except AttributeError:
+            sys.exit(
+                "The netbox api endpoint %s/%s/ "
+                "cannot be found" % (
+                    application,
+                    object_type
+                )
+            )
 
         # specific host handling
         if specific_host is not None:
-            result = []
-            h = endpoint.get(name=specific_host)
-            if h:
-                result.append(h)
+            result = endpoint.filter(name=specific_host)
         elif filters is not None:
-            result = endpoint.filter(**filters)
+            if "id" in list(filters.keys()):
+                result = [endpoint.get(filters.get("id"))]
+            else:
+                result = endpoint.filter(**filters)
         else:
             result = endpoint.all()
 
         return result
-
-    def _add_element_to_group(self, element_name, group_name, inventory):
-        self._initialize_group(group_name=group_name, inventory=inventory)
-        if element_name not in inventory.get(group_name).get('hosts'):
-            inventory[group_name]['hosts'].append(element_name)
 
     def _get_identifier(self, host, obj_type):
         """Return an identifier for the given host.
@@ -394,11 +488,17 @@ class InventoryBuilder:
             str: The computed id
         """
         # Get the 'name' field value of the specified host
-        r = host.get('name')
+        r = host.get('name', None)
         # If the 'name' field is empty, compute the id :
         #   <object type>_<id in netbox db>
         if r is None or r == "":
-            r = "%s_%s" % (obj_type, host.get('id'))
+            try:
+                r = "%s_%s" % (obj_type, host['id'])
+            except KeyError:
+                sys.exit(
+                    "The id key is not present in an unnamed host. Generic "
+                    "identifier cannot be computed"
+                )
         return r
 
     def _initialize_group(self, group_name, inventory):
@@ -415,20 +515,6 @@ class InventoryBuilder:
         # Initialize the host field of the group
         inventory[group_name].setdefault('hosts', [])
         return inventory
-
-    def _resolve_expression(self, key_path, data):
-        """Resolve the given key path to a value.
-
-        Args:
-            key_path (str): The path toward the key
-            data (dict): The actual host data dict that holds
-                the target value.
-
-        Returns:
-            The target value
-        """
-        t = Transformer(data=data)
-        return t.transform(self.parser.parse(key_path))
 
 
 def parse_cli_args(script_args):
@@ -472,6 +558,52 @@ def validate_configuration(configuration):
     Args:
             configuration (dict): The parsed configuration
     """
+    sub_import_def = {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+            "type": "object",
+            "required": ["stack", "vars"],
+            "properties": {
+                "stack": {
+                    "type": "string"
+                },
+                "vars": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "maxProperties": 1,
+                        "minProperties": 1,
+                        "patternProperties": {
+                            "\\w+": {
+                                "type": "object",
+                                "properties": {
+                                    "application": {
+                                        "type": "string"
+                                    },
+                                    "type": {
+                                        "type": "string"
+                                    },
+                                    "index": {
+                                        "type": "string"
+                                    },
+                                    "filter": {
+                                        "type": "object",
+                                        "patternProperties": {
+                                            "\\w+": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     config_schema = {
         "$schema": "http://json-schema.org/draft-07/schema#",
@@ -479,10 +611,13 @@ def validate_configuration(configuration):
         "title": "Configuration file",
         "description": "The configuration file of the dynamic inventory",
         "type": "object",
+        "required": ["netbox"],
         "properties": {
             "netbox": {
                 "type": "object",
                 "description": "The base key of the configuration file",
+                "required": ["api"],
+                "additionalProperties": False,
                 "properties": {
                     "api": {
                         "type": "object",
@@ -491,6 +626,7 @@ def validate_configuration(configuration):
                             "to connect to netbox api"
                         ),
                         "additionalProperties": False,
+                        "required": ["url"],
                         "properties": {
                             "url": {
                                 "type": "string",
@@ -515,7 +651,6 @@ def validate_configuration(configuration):
                                 )
                             }
                         },
-                        "required": ["url"],
                         "allOf": [
                             {
                                 "not": {
@@ -534,13 +669,13 @@ def validate_configuration(configuration):
                         "minProperties": 1,
                         "additionalProperties": False,
                         "patternProperties": {
-                            "^": {
+                            "\\w+": {
                                 "type": "object",
                                 "description": "The import section",
                                 "minProperties": 1,
                                 "additionalProperties": False,
                                 "patternProperties": {
-                                    "^": {
+                                    "\\w+": {
                                         "type": "object",
                                         "minProperties": 1,
                                         "additionalProperties": False,
@@ -552,31 +687,49 @@ def validate_configuration(configuration):
                                                     "type": "string"
                                                 }
                                             },
+                                            "sub_import": sub_import_def,
                                             "group_prefix": {
                                                 "type": "string",
                                             },
                                             "filters": {
                                                 "type": "object",
-                                                "minProperties": 1,
-                                                "description": (
-                                                    ""
-                                                )
+                                                "minProperties": 1
                                             },
                                             "host_vars": {
-                                                "type": "object",
-                                                "minProperties": 1
+                                                "type": "array",
+                                                "minItems": 1,
+                                                "items": {
+                                                    "type": "object",
+                                                    "minProperties": 1,
+                                                    "maxProperties": 1
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
                         }
+                    },
+                    "render": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": ["module", "name"],
+                            "properties": {
+                                "module": {
+                                    "type": "string"
+                                },
+                                "name": {
+                                    "type": "string"
+                                }
+                            }
+                        }
                     }
-                },
-                "required": ["api"]
+                }
             }
-        },
-        "required": ["netbox"]
+        }
     }
 
     return validate(instance=configuration, schema=config_schema)
@@ -615,6 +768,52 @@ def dump_json_inventory(inventory):
     print(json.dumps(inventory))
 
 
+def resolve_expression(query, namespace, first):
+    if first:
+        return pyjq.first(query, namespace)
+    return pyjq.all(query, namespace)
+
+
+def render_inventory(render_configuration, inventory):
+    if render_configuration:
+        func_array = []
+        for fdef in render_configuration:
+            try:
+                custom_module_name = fdef['module']
+                func_name = fdef['name']
+            except KeyError:
+                sys.exit("Could not parse custom module and function names")
+
+            try:
+                module_name = (
+                    "%s.%s" % (
+                        DEFAULT_MODULES_DIR,
+                        custom_module_name
+                    )
+                )
+                custom_module = importlib.import_module(module_name)
+            except ImportError:
+                sys.exit(
+                    "The custom module %s could not be "
+                    "imported" % (module_name)
+                )
+
+            try:
+                custom_func = getattr(custom_module, func_name)
+            except AttributeError:
+                sys.exit(
+                    "The custom function %s could not be found in the custom "
+                    "module" % (func_name)
+                )
+
+            func_array.append(custom_func)
+
+        for f in func_array:
+            inventory = f(inventory)
+
+    dump_json_inventory(inventory)
+
+
 def main():
     # Parse cli args
     args = parse_cli_args(sys.argv[1:])
@@ -623,8 +822,14 @@ def main():
 
     # Build the inventory
     builder = InventoryBuilder(args, configuration)
+    inventory = builder.build_inventory()
+
     # Print the JSON formatted inventory dict
-    dump_json_inventory(builder.build_inventory())
+    render_inventory(
+        configuration['netbox'].get('render', {}),
+        inventory
+    )
+
 
 if __name__ == '__main__':
     main()
