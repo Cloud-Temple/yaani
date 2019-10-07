@@ -92,7 +92,6 @@ def test_initialize_group(inv_builder, group, inventory, expected):
     assert inv_builder._initialize_group(group, inventory) == expected
 
 
-
 @pytest.mark.parametrize("host,obj_type,expected", [
     (  # present name
         {
@@ -126,3 +125,72 @@ def test_get_identifier_ko(inv_builder, host, obj_type):
     with pytest.raises(SystemExit) as err:
         inv_builder._get_identifier(host, obj_type)
     assert "The id key is not present" in str(err.value)
+
+
+@pytest.mark.parametrize("element_name,group_name,inventory,expected", [
+    (  # Existing group with already existing element
+        "item1",
+        "group1",
+        {
+            "group1": {
+                "hosts": [
+                    "item1"
+                ]
+            }
+        },
+        {
+            "group1": {
+                "hosts": [
+                    "item1"
+                ]
+            }
+        }
+    ),
+    (  # Existing group with non existing element
+        "item1",
+        "group1",
+        {
+            "group1": {
+                "hosts": [
+                    "item2"
+                ]
+            }
+        },
+        {
+            "group1": {
+                "hosts": [
+                    "item2",
+                    "item1"
+                ]
+            }
+        }
+    ),
+    (  # Non existing group with non existing element
+        "item1",
+        "group1",
+        {
+            "group2": {
+                "hosts": [
+                    "item2"
+                ]
+            }
+        },
+        {
+            "group2": {
+                "hosts": [
+                    "item2"
+                ]
+            },
+            "group1": {
+                "hosts": [
+                    "item1"
+                ]
+            },
+        }
+    ),
+])
+def test_add_element_to_group(inv_builder, element_name,
+                              group_name, inventory, expected):
+    assert inv_builder._add_element_to_group(
+        element_name, group_name, inventory
+    ) == expected
