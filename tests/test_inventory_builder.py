@@ -369,7 +369,7 @@ def test_add_element_to_group(inv_builder, element_name,
             "sk2": "skv2"
         }]
     ),
-    (  #  unfolded dict of sub-import section as a list
+    (  # unfolded dict of sub-import section as a list
         "sl#.s5[]",
         [
             "skv1",
