@@ -145,7 +145,7 @@ class InventoryBuilder:
         # Configuration file
         self._config_data = script_config['netbox']
         self._config_api = self._config_data['api']
-        self._import_section = self._config_data.get('import', None)
+        self._import_section = self._config_data.get('import', {})
 
         # Create the api connector
         self._nb = pynetbox.api(**self._config_api)
@@ -192,7 +192,7 @@ class InventoryBuilder:
                 }
 
             # For each application, iterate over all inner object types
-            for app_name, app_import in list(self._import_section.items()):
+            for app_name, app_import in list(iterator.items()):
                 for type_key, import_statement in app_import.items():
                     self._execute_import(
                         application=app_name,
