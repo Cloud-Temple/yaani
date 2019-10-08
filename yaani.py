@@ -8,6 +8,7 @@ import sys
 import os
 import yaml
 import importlib
+import importlib.util
 try:
     import json
 except ImportError:
@@ -23,8 +24,8 @@ import pyjq
 
 # The name of the Environment variable where to find the path towards the
 # configuration file
-DEFAULT_ENV_CONFIG_FILE = "NETBOX_CONFIG_FILE"
-DEFAULT_MODULES_DIR = "modules"
+DEFAULT_ENV_CONFIG_FILE = "YAANI_CONFIG_FILE"
+DEFAULT_ENV_MODULES_DIR = "YAANI_MODULES_PATH"
 
 
 class StackTransformer(Transformer):
@@ -786,18 +787,24 @@ def render_inventory(render_configuration, inventory):
                 sys.exit("Could not parse custom module and function names")
 
             try:
-                module_name = (
-                    "%s.%s" % (
-                        DEFAULT_MODULES_DIR,
-                        custom_module_name
-                    )
+                # Define a default dir for custom modules
+                default_dir = os.getcwd() + "/modules"
+                # Select the proper modules dir
+                mod_dir = os.getenv(DEFAULT_ENV_MODULES_DIR, default_dir)
+                # Build full modules path
+                module_path = "%s/%s.py" % (mod_dir, custom_module_name)
+                spec = importlib.util.spec_from_file_location(
+                    custom_module_name, module_path
                 )
-                custom_module = importlib.import_module(module_name)
+                custom_module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(custom_module)
             except ImportError:
                 sys.exit(
                     "The custom module %s could not be "
                     "imported" % (module_name)
                 )
+            except FileNotFoundError as err:
+                sys.exit("The custom module could not be found. %s" % str(err))
 
             try:
                 custom_func = getattr(custom_module, func_name)
