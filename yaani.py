@@ -533,7 +533,9 @@ def parse_cli_args(script_args):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '-c', '--config-file',
-        default=os.getenv(DEFAULT_ENV_CONFIG_FILE, "netbox.yml"),
+        default=os.getenv(
+            DEFAULT_ENV_CONFIG_FILE, os.getcwd() + "/netbox.yml"
+        ),
         help="""Path for script's configuration file. If None is specified,
                 default value is %s environment variable or netbox.yml in the
                 current dir.""" % DEFAULT_ENV_CONFIG_FILE
