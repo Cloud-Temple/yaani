@@ -67,7 +67,7 @@ def test_data():
     (".l2[].a1", True, "b1"),  # expand list
     (".l2[].a1 | sub(\"b\"; \"c\")", True, "c1"),  # expand list and sub
 ])
-def test_expr_reso_grammar_ok(test_data, arg, first, exp):
+def test_jqexpression_ok(test_data, arg, first, exp):
     """Test expression resolution through pyjq"""
     assert resolve_expression(arg, test_data, first) == exp
 
@@ -102,7 +102,7 @@ def test_expr_reso_grammar_ok(test_data, arg, first, exp):
 def test_parse_cli_args_ok(args, exp):
     cli_args = parse_cli_args(args)
 
-    assert cli_args.config_file == exp['config-file']
+    assert cli_args.config_file.split("/")[-1] == exp['config-file']
     assert cli_args.list == exp['list']
     assert cli_args.host == exp['host']
 
@@ -116,14 +116,14 @@ def test_parse_cli_args_ko(args):
 
 
 @pytest.mark.parametrize("arg", [
-    ({  # only api section with only url
+    ({  # with only url
         "netbox": {
             "api": {
                 "url": "http://test.com"
             }
         }
     }),
-    ({  # only api section with url and private key
+    ({  # with url and private key
         "netbox": {
             "api": {
                 "url": "http://test.com",
@@ -131,7 +131,7 @@ def test_parse_cli_args_ko(args):
             }
         }
     }),
-    ({  # only api section with url and private key file
+    ({  # with url and private key file
         "netbox": {
             "api": {
                 "url": "http://test.com",
@@ -139,7 +139,7 @@ def test_parse_cli_args_ko(args):
             }
         }
     }),
-    ({  # only api section with url and ssl verify
+    ({  # with url and ssl verify
         "netbox": {
             "api": {
                 "url": "http://test.com",
@@ -147,47 +147,107 @@ def test_parse_cli_args_ko(args):
             }
         }
     }),
-    ({  # only api section with url and token
+    ({  # with url and token
         "netbox": {
             "api": {
                 "url": "http://test.com",
                 "token": "Test_token"
             }
         }
-    }),
-    ({  # full api section and import section containing devices with all
-        # options
-        "netbox": {
-            "api": {
-                "url": "http://test.com",
-                "token": "token_test"
-            },
-            "import": {
-                "dcim": {
-                    "devices": {
-                        "filters": {
-                            "role_id": 3
+    })
+])
+def test_validate_api_ok(arg):
+    # only api section
+    assert validate_configuration(arg) is None
+
+
+@pytest.mark.parametrize("arg", [
+        ({  # containing devices with all
+            "netbox": {
+                "api": {
+                    "url": "http://test.com"
+                },
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "filters": {
+                                "role_id": 3
+                            },
                         },
-                        "group_by": [
-                            "device_role",
-                            "tags"
-                        ],
-                        "group_prefix": "dev_",
-                        "host_vars": {
-                            "ip": "ip"
-                        }
-                    },
-                    "racks": {
-                        "filters": {
-                            "role_id": 4
-                        }
                     }
                 }
             }
-        }
-    }),
-])
-def test_validate_configuration_ok(arg):
+        }),
+        ({  # containing devices with all
+            "netbox": {
+                "api": {
+                    "url": "http://test.com"
+                },
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "group_by": [
+                                "device_role",
+                                "tags"
+                            ],
+                        },
+                    }
+                }
+            }
+        }),
+        ({  # containing devices with all
+            "netbox": {
+                "api": {
+                    "url": "http://test.com"
+                },
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "group_prefix": "dev_",
+                        },
+                    }
+                }
+            }
+        }),
+        ({  # containing devices with all
+            "netbox": {
+                "api": {
+                    "url": "http://test.com"
+                },
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "host_vars": [
+                                {"ip": "ip"}
+                            ]
+                        },
+                    }
+                }
+            }
+        }),
+    ])
+def test_validate_import_ok(arg):
+    # full api section with import section
+    assert validate_configuration(arg) is None
+
+
+@pytest.mark.parametrize("arg", [
+        ({  # full api section and import section containing devices with all
+            # options
+            "netbox": {
+                "api": {
+                    "url": "http://test.com"
+                },
+                "render": [
+                    {
+                        "module": "test",
+                        "name": "test"
+                    },
+                ]
+            }
+        }),
+    ])
+def test_validate_render_ok(arg):
     assert validate_configuration(arg) is None
 
 
