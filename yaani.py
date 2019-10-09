@@ -7,7 +7,6 @@ import argparse
 import sys
 import os
 import yaml
-import importlib
 import importlib.util
 try:
     import json
@@ -753,8 +752,10 @@ def load_config_file(config_file_path):
         sys.exit("Error: Cannot open configuration file.\n%s" % io_error)
     except yaml.YAMLError as yaml_error:
         # Handle Yaml level exceptions
-        sys.exit("Error: Unable to parse configuration file: %s" %
-                 yaml_error)
+        sys.exit(
+            "Error: Unable to parse configuration file: %s" %
+            yaml_error
+        )
 
     # If syntax of configuration file is valid, nothing happens
     # Beware, syntax can be valid while semantic is not
