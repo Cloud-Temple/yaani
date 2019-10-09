@@ -417,8 +417,118 @@ def test_validate_api_ko(arg):
                 }
             }
         }),
+        ({  # containing devices with filters
+            "netbox": {
+                "api": {
+                    "url": "http://test.com"
+                },
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "filters": {
+                                "role_id": 3
+                            },
+                        },
+                    }
+                }
+            }
+        }),
+        ({  # containing devices with group_by
+            "netbox": {
+                "api": {
+                    "url": "http://test.com"
+                },
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "group_by": [
+                                "device_role",
+                                "tags"
+                            ],
+                        },
+                    }
+                }
+            }
+        }),
+        ({  # containing devices with devices
+            "netbox": {
+                "api": {
+                    "url": "http://test.com"
+                },
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "group_prefix": "dev_",
+                        },
+                    }
+                }
+            }
+        }),
+        ({  # containing devices with host_vars
+            "netbox": {
+                "api": {
+                    "url": "http://test.com"
+                },
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "host_vars": [
+                                {"ip": "ip"}
+                            ]
+                        },
+                    }
+                }
+            }
+        }),
+        ({  # containing devices with all
+            "netbox": {
+                "api": {
+                    "url": "http://test.com"
+                },
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "filters": {
+                                "role_id": 3
+                            },
+                            "group_by": [
+                                "device_role"
+                            ],
+                            "group_prefix": "dev_",
+                            "host_vars": [
+                                {"ip": "ip"}
+                            ],
+                        },
+                    }
+                }
+            }
+        }),
+        ({  # containing devices with host_vars and racks with group_by
+            "netbox": {
+                "api": {
+                    "url": "http://test.com"
+                },
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "host_vars": [
+                                {"ip": "ip"}
+                            ]
+                        },
+                        "racks": {
+                            "group_by": [
+                                "device_role"
+                            ],
+                        },
+                    }
+                }
+            }
+        }),
         ({  # containing dcim with devices and virtualization with racks
             "netbox": {
+                "api": {
+                    "url": "http://test.com"
+                },
                 "import": {
                     "dcim": {
                         "devices": {
@@ -681,6 +791,27 @@ def test_validate_import_ko(api_config, arg, msg):
                 {
                     "module": "test1",
                     "name": "test1"
+                },
+            ]
+        }
+    }),
+])
+def test_validate_import_ok(arg):
+    # full api section with import section
+    assert validate_configuration(arg) is None
+
+
+@pytest.mark.parametrize("arg", [
+    ({  # full api section and import section containing devices with all
+        # options
+        "netbox": {
+            "api": {
+                "url": "http://test.com"
+            },
+            "render": [
+                {
+                    "module": "test",
+                    "name": "test"
                 },
             ]
         }
