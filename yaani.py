@@ -469,10 +469,12 @@ class InventoryBuilder:
         if specific_host is not None:
             result = endpoint.filter(name=specific_host)
         elif filters is not None:
-            if "id" in list(filters.keys()):
-                result = [endpoint.get(filters.get("id"))]
-            else:
-                result = endpoint.filter(**filters)
+            result = []
+            for args_array in filters:
+                if "id" in list(args_array.keys()):
+                    result += [endpoint.get(args_array.get("id"))]
+                else:
+                    result += endpoint.filter(**args_array)
         else:
             result = endpoint.all()
 
@@ -695,8 +697,12 @@ def validate_configuration(configuration):
                                                 "type": "string",
                                             },
                                             "filters": {
-                                                "type": "object",
-                                                "minProperties": 1
+                                                "type": "array",
+                                                "minItems": 1,
+                                                "items": {
+                                                    "type": "object",
+                                                    "minProperties": 1
+                                                }
                                             },
                                             "host_vars": {
                                                 "type": "array",
