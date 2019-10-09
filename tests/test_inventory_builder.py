@@ -406,6 +406,7 @@ def test_add_element_to_inventory_ok(inv_builder, element_name, application,
     ) is None
 
 
+
 @pytest.mark.parametrize("application, import_type", [
     (
         "dcim",

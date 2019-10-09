@@ -161,6 +161,7 @@ def test_validate_api_ok(arg):
     assert validate_configuration(arg) is None
 
 
+
 @pytest.mark.parametrize("arg", [
         ({  # containing devices with all
             "netbox": {
