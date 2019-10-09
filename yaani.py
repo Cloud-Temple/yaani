@@ -469,12 +469,22 @@ class InventoryBuilder:
         if specific_host is not None:
             result = endpoint.filter(name=specific_host)
         elif filters is not None:
-            result = []
+            tmp_result = []
             for args_array in filters:
                 if "id" in list(args_array.keys()):
-                    result += [endpoint.get(args_array.get("id"))]
+                    tmp_result += [endpoint.get(args_array.get("id"))]
                 else:
-                    result += endpoint.filter(**args_array)
+                    tmp_result += endpoint.filter(**args_array)
+            # Remove duplicates in the list in order to not execute actions
+            # on the samed elements several times
+            id_list = []
+            result = []
+
+            for h in tmp_result:
+                if h.id not in id_list:
+                    id_list.append(h.id)
+                    result.append(h)
+
         else:
             result = endpoint.all()
 
