@@ -1,6 +1,6 @@
 import pytest
 
-from yaani import (
+from yaani.yaani import (
     parse_cli_args,
     validate_configuration,
     resolve_expression

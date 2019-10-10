@@ -1,4 +1,4 @@
-BASE_TEST_DIR=yaani/tests/
+BASE_TEST_DIR=tests/
 
 .PHONY: test clean
 
