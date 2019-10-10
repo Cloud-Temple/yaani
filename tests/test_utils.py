@@ -27,6 +27,7 @@ def import_config():
         }
     }
 
+
 @pytest.fixture
 def test_data():
     return {
@@ -57,32 +58,58 @@ def test_data():
 
 
 @pytest.mark.parametrize("arg, first, exp", [
-    (".a", False, [1]),  # regular key
-    (".b", False, [2]),  # regular key
-    (".c", False, [3]),  # regular key
-    (".d", False, [None]),  # regular key with None value
-    (".e", False, [{"e_a": "test value"}]),  # regular key with dict value
-    (".e.e_a", False, ["test value"]),  # key in a dict
-    (".a // \"b\"", False, [1]),  # default_key test on non null value
-    (".d // \"b\"", False, ["b"]),  # default_key test on null value
-    (".e.e_a | sub(\"value\";\"\")", False, ["test "]),  # sub on non null value
-    (".d // \"_\"| sub(\"value\";\"\")", False, ["_"]),  # sub non null value
-    (".l[] | sub(\"2\";\"\")", False, ["1", "", "3"]),  # sub on list value
-    (".l2[].a1", False, ["b1", "b2", "b3"]),  # expand list
-    (".l2[].a1 | sub(\"b\"; \"c\")", False, ["c1", "c2", "c3"]),  # expand list and sub
-    (".a", True, 1),  # regular key
-    (".b", True, 2),  # regular key
-    (".c", True, 3),  # regular key
-    (".d", True, None),  # regular key with None value
-    (".e", True, {"e_a": "test value"}),  # regular key with dict value
-    (".e.e_a", True, "test value"),  # key in a dict
-    (".a // \"b\"", True, 1),  # default_key test on non null value
-    (".d // \"b\"", True, "b"),  # default_key test on null value
-    (".e.e_a | sub(\"value\";\"\")", True, "test "),  # sub on non null value
-    (".d // \"_\"| sub(\"value\";\"\")", True, "_"),  # sub non null value
-    (".l[] | sub(\"2\";\"\")", True, "1"),  # sub on list value
-    (".l2[].a1", True, "b1"),  # expand list
-    (".l2[].a1 | sub(\"b\"; \"c\")", True, "c1"),  # expand list and sub
+    # regular key
+    (".a", False, [1]),
+    # regular key
+    (".b", False, [2]),
+    # regular key
+    (".c", False, [3]),
+    # regular key with None value
+    (".d", False, [None]),
+    # regular key with dict value
+    (".e", False, [{"e_a": "test value"}]),
+    # key in a dict
+    (".e.e_a", False, ["test value"]),
+    # default_key test on non null value
+    (".a // \"b\"", False, [1]),
+    # default_key test on null value
+    (".d // \"b\"", False, ["b"]),
+    # sub on non null value
+    (".e.e_a | sub(\"value\";\"\")", False, ["test "]),
+    # sub non null value
+    (".d // \"_\"| sub(\"value\";\"\")", False, ["_"]),
+    # sub on list value
+    (".l[] | sub(\"2\";\"\")", False, ["1", "", "3"]),
+    # expand list
+    (".l2[].a1", False, ["b1", "b2", "b3"]),
+    # expand list and sub
+    (".l2[].a1 | sub(\"b\"; \"c\")", False, ["c1", "c2", "c3"]),
+    # regular key
+    (".a", True, 1),
+    # regular key
+    (".b", True, 2),
+    # regular key
+    (".c", True, 3),
+    # regular key with None value
+    (".d", True, None),
+    # regular key with dict value
+    (".e", True, {"e_a": "test value"}),
+    # key in a dict
+    (".e.e_a", True, "test value"),
+    # default_key test on non null value
+    (".a // \"b\"", True, 1),
+    # default_key test on null value
+    (".d // \"b\"", True, "b"),
+    # sub on non null value
+    (".e.e_a | sub(\"value\";\"\")", True, "test "),
+    # sub non null value
+    (".d // \"_\"| sub(\"value\";\"\")", True, "_"),
+    # sub on list value
+    (".l[] | sub(\"2\";\"\")", True, "1"),
+    # expand list
+    (".l2[].a1", True, "b1"),
+    # expand list and sub
+    (".l2[].a1 | sub(\"b\"; \"c\")", True, "c1"),
 ])
 def test_jqexpression_ok(test_data, arg, first, exp):
     """Test expression resolution through pyjq"""
@@ -196,6 +223,7 @@ def test_parse_cli_args_ko(args):
 def test_validate_api_ok(arg):
     """Validate API configuration"""
     assert validate_configuration(arg) is None
+
 
 @pytest.mark.parametrize("arg", [
     ({  # empty api section
