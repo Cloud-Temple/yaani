@@ -5,10 +5,27 @@ from yaani.yaani import (
     validate_configuration,
     resolve_expression
 )
-
+from jsonschema import ValidationError
 import pytest
 import pyjq
 
+
+@pytest.fixture
+def api_config():
+    return {
+        "url": "http://test.com"
+    }
+
+
+@pytest.fixture
+def import_config():
+    return {
+        "dcim": {
+            "devices": {
+                "group_prefix": "_"
+            }
+        }
+    }
 
 @pytest.fixture
 def test_data():
@@ -177,22 +194,48 @@ def test_parse_cli_args_ko(args):
     }),
 ])
 def test_validate_api_ok(arg):
-    # only api section
+    """Validate API configuration"""
     assert validate_configuration(arg) is None
+
+@pytest.mark.parametrize("arg", [
+    ({  # empty api section
+        "nebtox": {
+            "api": {}
+        }
+    }),
+    ({  # missing URL
+        "nebtox": {
+            "api": {
+                "token": "test"
+            }
+        }
+    }),
+    ({  # Both private_key and private_key_file
+        "nebtox": {
+            "api": {
+                "url": "http://test.com",
+                "private_key": "private key",
+                "private_key_file": "private key"
+            }
+        }
+    }),
+])
+def test_validate_api_ko(arg):
+    """Validate API configuration structure errors"""
+    with pytest.raises(ValidationError):
+        validate_configuration(arg)
 
 
 @pytest.mark.parametrize("arg", [
         ({  # containing devices with filters
             "netbox": {
-                "api": {
-                    "url": "http://test.com"
-                },
                 "import": {
                     "dcim": {
                         "devices": {
-                            "filters": {
-                                "role_id": 3
-                            },
+                            "filters": [  # Several filters
+                                {"role_id": 3},
+                                {"site_id": 4}
+                            ],
                         },
                     }
                 }
@@ -200,40 +243,31 @@ def test_validate_api_ok(arg):
         }),
         ({  # containing devices with group_by
             "netbox": {
-                "api": {
-                    "url": "http://test.com"
-                },
                 "import": {
                     "dcim": {
                         "devices": {
                             "group_by": [
-                                "device_role",
-                                "tags"
+                                ".device_role",
+                                ".tags"
                             ],
                         },
                     }
                 }
             }
         }),
-        ({  # containing devices with devices
+        ({  # containing devices with group prefix
             "netbox": {
-                "api": {
-                    "url": "http://test.com"
-                },
                 "import": {
                     "dcim": {
                         "devices": {
-                            "group_prefix": "dev_",
-                        },
+                            "group_prefix": "dev_"
+                        }
                     }
                 }
             }
         }),
         ({  # containing devices with host_vars
             "netbox": {
-                "api": {
-                    "url": "http://test.com"
-                },
                 "import": {
                     "dcim": {
                         "devices": {
@@ -245,17 +279,51 @@ def test_validate_api_ok(arg):
                 }
             }
         }),
-        ({  # containing devices with all
+        ({  # containing devices with sub-imports
             "netbox": {
-                "api": {
-                    "url": "http://test.com"
-                },
                 "import": {
                     "dcim": {
                         "devices": {
-                            "filters": {
-                                "role_id": 3
-                            },
+                            "sub_import": [
+                                {
+                                    "stack": "a.b",
+                                    "vars": [
+                                        {
+                                            "a": {
+                                                "application": "whatever",
+                                                "type": "whatever",
+                                                "index": "whatever",
+                                                "filter": {
+                                                    "device_id": ".id",
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "b": {
+                                                "application": "whatever",
+                                                "type": "whatever",
+                                                "index": "whatever",
+                                                "filter": {
+                                                    "device_id": ".id",
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                    }
+                }
+            }
+        }),
+        ({  # containing devices with all
+            "netbox": {
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "filters": [
+                                {"role_id": 3}
+                            ],
                             "group_by": [
                                 "device_role"
                             ],
@@ -263,6 +331,33 @@ def test_validate_api_ok(arg):
                             "host_vars": [
                                 {"ip": "ip"}
                             ],
+                            "sub_import": [
+                                {
+                                    "stack": "a.b",
+                                    "vars": [
+                                        {
+                                            "a": {
+                                                "application": "whatever",
+                                                "type": "whatever",
+                                                "index": "whatever",
+                                                "filter": {
+                                                    "device_id": ".id",
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "b": {
+                                                "application": "whatever",
+                                                "type": "whatever",
+                                                "index": "whatever",
+                                                "filter": {
+                                                    "device_id": ".id",
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
                         },
                     }
                 }
@@ -270,9 +365,6 @@ def test_validate_api_ok(arg):
         }),
         ({  # containing devices with host_vars and racks with group_by
             "netbox": {
-                "api": {
-                    "url": "http://test.com"
-                },
                 "import": {
                     "dcim": {
                         "devices": {
@@ -291,9 +383,6 @@ def test_validate_api_ok(arg):
         }),
         ({  # containing dcim with devices and virtualization with racks
             "netbox": {
-                "api": {
-                    "url": "http://test.com"
-                },
                 "import": {
                     "dcim": {
                         "devices": {
@@ -313,29 +402,291 @@ def test_validate_api_ok(arg):
             }
         }),
     ])
-def test_validate_import_ok(arg):
+def test_validate_import_ok(api_config, arg):
     # full api section with import section
+    arg["netbox"]["api"] = api_config
     assert validate_configuration(arg) is None
 
 
-@pytest.mark.parametrize("arg", [
-        ({  # full api section and import section containing devices with all
-            # options
+@pytest.mark.parametrize("arg,msg", [
+    (
+        {  # empty import
             "netbox": {
-                "api": {
-                    "url": "http://test.com"
-                },
+                "import": {}
+            }
+        },
+        "does not have enough properties"
+    ),
+    (
+        {  # forgot app
+            "netbox": {
+                "import": {
+                    "devices": {
+                        "group_prefix": "prefix"
+                    }
+                }
+            }
+        },
+        "'prefix' is not of type 'object'"
+    ),
+    (
+        {  # empty app
+            "netbox": {
+                "import": {
+                    "dcim": {}
+                }
+            }
+        },
+        "does not have enough properties"
+    ),
+    (
+        {  # empty type
+            "netbox": {
+                "import": {
+                    "dcim": {
+                        "devices": {}
+                    }
+                }
+            }
+        },
+        "does not have enough properties"
+    ),
+    (
+        {  # Extra vars
+            "netbox": {
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "extra": "vars"
+                        }
+                    }
+                }
+            }
+        },
+        "Additional properties are not allowed"
+    ),
+    (
+        {  # bad prefix type
+            "netbox": {
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "group_prefix": 1
+                        }
+                    }
+                }
+            }
+        },
+        "is not of type 'string"
+    ),
+    (
+        {  # bad filters type
+            "netbox": {
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "filters": {
+                                "role_id"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "is not of type 'array"
+    ),
+    (
+        {  # bad group_by type
+            "netbox": {
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "group_by": {
+                                "role_id": 2
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "is not of type 'array"
+    ),
+    (
+        {  # empty group by
+            "netbox": {
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "group_by": []
+                        }
+                    }
+                }
+            }
+        },
+        "is too short"
+    ),
+    (
+        {  # empty hostvars
+            "netbox": {
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "host_vars": []
+                        }
+                    }
+                }
+            }
+        },
+        "is too short"
+    ),
+    (
+        {  # bad group_by type
+            "netbox": {
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "host_vars": {
+                                "role_id": 2
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "is not of type 'array"
+    ),
+    (
+        {  # bad group_by type
+            "netbox": {
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "host_vars": [
+                                {
+                                    "role_id": ".role.id",
+                                    "extra key": "extra value",
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "has too many properties"
+    ),
+    (
+        {  # bad group_by type
+            "netbox": {
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "host_vars": [
+                                {
+                                    "role_id": ".role.id",
+                                },
+                                {
+                                    "role_id": ".role.id",
+                                    "other": "value"
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "has too many properties"
+    ),
+    (
+        {  # bad group_by type
+            "netbox": {
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "host_vars": [
+                                {},
+                                {
+                                    "role_id": ".role.id"
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "does not have enough properties"
+    ),
+])
+def test_validate_import_ko(api_config, arg, msg):
+    # full api section with import section
+    arg["netbox"]["api"] = api_config
+    with pytest.raises(ValidationError) as err:
+        validate_configuration(arg)
+    assert msg in str(err.value)
+
+
+@pytest.mark.parametrize("arg", [
+        ({  # Two renders
+            "netbox": {
                 "render": [
                     {
-                        "module": "test",
-                        "name": "test"
+                        "module": "test1",
+                        "name": "test1"
+                    },
+                    {
+                        "module": "2",
+                        "name": "2"
+                    },
+                ]
+            }
+        }),
+        ({  # One renders
+            "netbox": {
+                "render": [
+                    {
+                        "module": "test1",
+                        "name": "test1"
                     },
                 ]
             }
         }),
     ])
-def test_validate_render_ok(arg):
+def test_validate_render_ok(api_config, import_config, arg):
+    arg["netbox"]["api"] = api_config
+    arg["netbox"]["import"] = import_config
     assert validate_configuration(arg) is None
+
+
+@pytest.mark.parametrize("arg,msg", [
+    (
+        {
+            "netbox": {
+                "render": []
+            }
+        },
+        "is too short"
+    ),
+    (
+        {
+            "netbox": {
+                "render": [
+                    {
+                        "module": "test",
+                        "name": "test",
+                        "extra": "value"
+                    }
+                ]
+            }
+        },
+        "Additional properties are not allowed"
+    ),
+])
+def test_validate_import_ko(api_config, import_config, arg, msg):
+    # full api section with import section
+    arg["netbox"]["api"] = api_config
+    arg["netbox"]["import"] = import_config
+    with pytest.raises(ValidationError) as err:
+        validate_configuration(arg)
+    assert msg in str(err.value)
 
 
 @pytest.mark.parametrize("arg", [
@@ -539,5 +890,5 @@ def test_validate_render_ok(arg):
     }),
 ])
 def test_validate_configuration_ko(arg):
-    with pytest.raises(Exception) as err:
+    with pytest.raises(ValidationError) as err:
         validate_configuration(arg)
