@@ -1,4 +1,5 @@
 import pytest
+import mock
 
 from yaani import (
     InventoryBuilder
@@ -8,6 +9,7 @@ from yaani import (
 @pytest.fixture
 def cli_args():
     """Return simple argument set coherent with InventoryBuilder"""
+
     class Args:
         def __init__(self):
             self.config_file = "netbox.yml"
@@ -82,62 +84,35 @@ def config():
             }
         }
     }
-
     return conf
+
+
+@pytest.fixture
+def device_import_option():
+    return InventoryBuilder(cli_args, config).imports.get('dcim', {}).get('devices', {})
+
+
+@pytest.fixture
+def init_inventory():
+    return {"_meta": {"hostvars": {}}}
+    # return {
+    #     "_meta": {"hostvars": {}},
+    #     "devices": {"hosts": []},
+    #     "all": {"hosts": []},
+    #     "dev_cpe": {"hosts": []}
+    # }
+
+    # return {
+    #     "_meta": {"hostvars": {}},
+    #     "devices": {"hosts": ["BK A07-0", "BK A07-1"]},
+    #     "all": {"hosts": ["BK A07-0", "BK A07-1"]},
+    #     "dev_cpe": {"hosts": ["amf-1.cpe0009", "asi-1.cpe0001"]}
+    # }
 
 
 @pytest.fixture
 def inv_builder(cli_args, config):
     return InventoryBuilder(cli_args, config)
-
-
-@pytest.mark.parametrize("group,inventory,expected", [
-    (  # non existing group
-        "test_group",
-        {},
-        {
-            "test_group": {
-                "hosts": []
-            }
-        }
-    ),
-    (  # existing group with no hosts
-        "test_group",
-        {
-            "test_group": {
-                "test_key": "1"
-            }
-        },
-        {
-            "test_group": {
-                "test_key": "1",
-                "hosts": []
-            }
-        }
-    ),
-    (  # existing group with hosts
-        "test_group",
-        {
-            "test_group": {
-                "hosts": [
-                    1,
-                    2
-                ]
-            }
-        },
-        {
-            "test_group": {
-                "hosts": [
-                    1,
-                    2
-                ]
-            }
-        }
-    ),
-])
-def test_initialize_group(inv_builder, group, inventory, expected):
-    """Test the _initialize_group method properly works"""
-    assert inv_builder._initialize_group(group, inventory) == expected
 
 
 @pytest.mark.parametrize("host,obj_type,expected", [
@@ -175,73 +150,17 @@ def test_get_identifier_ko(inv_builder, host, obj_type):
     assert "The id key is not present" in str(err.value)
 
 
-@pytest.mark.parametrize("element_name,group_name,inventory,expected", [
-    (  # Existing group with already existing element
-        "item1",
-        "group1",
-        {
-            "group1": {
-                "hosts": [
-                    "item1"
-                ]
-            }
-        },
-        {
-            "group1": {
-                "hosts": [
-                    "item1"
-                ]
-            }
+@pytest.fixture
+def test_data():
+    return {
+        "a": 1,
+        "b": 2,
+        "c": 3,
+        "d": None,
+        "e": {
+            "e_a": "test value"
         }
-    ),
-    (  # Existing group with non existing element
-        "item1",
-        "group1",
-        {
-            "group1": {
-                "hosts": [
-                    "item2"
-                ]
-            }
-        },
-        {
-            "group1": {
-                "hosts": [
-                    "item2",
-                    "item1"
-                ]
-            }
-        }
-    ),
-    (  # Non existing group with non existing element
-        "item1",
-        "group1",
-        {
-            "group2": {
-                "hosts": [
-                    "item2"
-                ]
-            }
-        },
-        {
-            "group2": {
-                "hosts": [
-                    "item2"
-                ]
-            },
-            "group1": {
-                "hosts": [
-                    "item1"
-                ]
-            },
-        }
-    ),
-])
-def test_add_element_to_group(inv_builder, element_name,
-                              group_name, inventory, expected):
-    assert inv_builder._add_element_to_group(
-        element_name, group_name, inventory
-    ) == expected
+    }
 
 
 @pytest.mark.parametrize("key_path,expected", [
@@ -379,3 +298,225 @@ def test_add_element_to_group(inv_builder, element_name,
 ])
 def test_resolve_expression(inv_builder, namespaces, key_path, expected):
     assert inv_builder._resolve_expression(key_path, namespaces) == expected
+
+
+@pytest.mark.parametrize("element_name,group_name,inventory,expected", [
+    (  # Existing group with already existing element
+        "item1",
+        "group1",
+        {
+            "group1": {
+                "hosts": [
+                    "item1"
+                ]
+            }
+        },
+        {
+            "group1": {
+                "hosts": [
+                    "item1"
+                ]
+            }
+        }
+    ),
+    (  # Existing group with non existing element
+        "item1",
+        "group1",
+        {
+            "group1": {
+                "hosts": [
+                    "item2"
+                ]
+            }
+        },
+        {
+            "group1": {
+                "hosts": [
+                    "item2",
+                    "item1"
+                ]
+            }
+        }
+    ),
+    (  # Non existing group with non existing element
+        "item1",
+        "group1",
+        {
+            "group2": {
+                "hosts": [
+                    "item2"
+                ]
+            }
+        },
+        {
+            "group2": {
+                "hosts": [
+                    "item2"
+                ]
+            },
+            "group1": {
+                "hosts": [
+                    "item1"
+                ]
+            },
+        }
+    ),
+])
+def test_add_element_to_group_ok(inv_builder, element_name,
+                              group_name, inventory, expected):
+    assert inv_builder._add_element_to_group(
+        element_name,
+        group_name,
+        inventory
+    ) == expected
+
+
+@pytest.mark.parametrize("element_name, application, import_type, inventory, namespace, expected", [
+    (
+        "item1",
+        "dcim",
+        "devices",
+        {"_meta": {"hostvars": {}}},
+        {"import": dict(name="host1"), "build": {}, "sub-import": {}},
+        {},
+    ),
+    (
+        "item1",
+        "virtualization",
+        "racks",
+        {"_meta": {"hostvars": {}}},
+        {"import": dict(name="host1"), "build": {}, "sub-import": {}},
+        {},
+    ),
+    (
+        "item1",
+        "dcim",
+        "devices",
+        {"_meta": {"hostvars": {}}},
+        {"import": dict(name="host1"), "build": {}, "sub-import": {}},
+        {},
+    ),
+])
+def test_execute_group_by_ok(inv_builder, element_name, application,
+                                     import_type, inventory, namespace, expected):
+    import_options = inv_builder._import_section.get(application, {}).get(import_type, {})
+
+    assert inv_builder._execute_group_by(
+        element_name,
+        import_options.get('group_by', None),
+        import_options.get('group_prefix', None),
+        inventory,
+        namespace
+    ) is None
+    # assert inventory == expected
+
+
+# test_load_element_vars_ok
+
+
+@pytest.mark.parametrize("element_name, application, import_type, hostvalue, inventory, expected", [
+    (
+        "BK A07-0",
+        "dcim",
+        "devices",
+        "hostvalue",
+        {"_meta": {"hostvars": {}}},
+        {'_meta': {'hostvars': {}},
+         'devices': {'hosts': ['BK A07-0']},
+         'all': {'hosts': ['BK A07-0']}
+        },
+    ),
+    (
+        "amf-1.cpe0009",
+        "virtualization",
+        "racks",
+        "",
+        {"_meta": {"hostvars": {}}},
+        {'_meta': {'hostvars': {}},
+         'racks': {'hosts': ['amf-1.cpe0009']},
+         'all': {'hosts': ['amf-1.cpe0009']}
+         },
+    ),
+    (
+        "BK A07-0",
+        "dcim",
+        "devices",
+        None,
+        {"_meta": {"hostvars": {}}},
+        {'_meta': {'hostvars': {}},
+         'devices': {'hosts': ['BK A07-0']},
+         'all': {'hosts': ['BK A07-0']}
+        },
+    ),
+])
+def test_add_element_to_inventory_ok(inv_builder, element_name, application,
+                                     import_type, hostvalue, inventory, expected):
+    import_options = inv_builder._import_section.get(application,{}).get(import_type, {})
+
+    assert inv_builder._add_element_to_inventory(
+        element_name,
+        dict(name=hostvalue),
+        inventory,
+        import_type,
+        import_options.get('group_by', None),
+        import_options.get('group_prefix', None),
+        import_options.get('host_vars', None)
+    ) is None
+    assert inventory == expected
+
+
+"""
+@pytest.mark.parametrize("application, import_type", [
+    (
+        "dcim",
+        "devices",
+    ),
+])
+def test_get_element_list_ok(application, import_type, inv_builder):
+    filters = inv_builder._import_section.get(application, {}).get(import_type, {}).get('filters', None)
+
+    assert InventoryBuilder._get_elements_list(
+        inv_builder,
+        application,
+        import_type,
+        filters=filters,
+        specific_host=inv_builder._host
+    )
+"""
+
+
+@pytest.mark.parametrize("application, import_type, inventory, get_element_list, expected", [
+    (
+        "dcim",
+        "devices",
+        {"_meta": {"hostvars": {}}},
+        [dict(name="BK A07-0"), dict(name="amf-1.cpe0009")],
+        {'_meta': {'hostvars': {}},
+         'devices': {'hosts': ['BK A07-0', 'amf-1.cpe0009']},
+         'all': {'hosts': ['BK A07-0', 'amf-1.cpe0009']}
+        }
+    ),
+    (
+        "virtualization",
+        "racks",
+        {"_meta": {"hostvars": {}}},
+        [dict(name="BK A07-0"), dict(name="amf-1.cpe0009"), dict(name="KO-15.dic0032")],
+        {'_meta': {'hostvars': {}},
+         'racks': {'hosts': ['BK A07-0', 'amf-1.cpe0009', 'KO-15.dic0032']},
+         'all': {'hosts': ['BK A07-0', 'amf-1.cpe0009', 'KO-15.dic0032']}
+        }
+    ),
+])
+def test_execute_import_ok(inv_builder, application, inventory, import_type, get_element_list, expected, mocker):
+    mocker.patch.object(InventoryBuilder, "_get_elements_list", return_value=get_element_list)
+    import_options = inv_builder._import_section.get(application, {}).get(import_type, {})
+
+    assert inv_builder._execute_import(
+        application,
+        import_type,
+        import_options,
+        inventory
+    ) is None
+    assert inventory == expected
+
+
