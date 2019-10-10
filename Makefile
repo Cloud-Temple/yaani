@@ -1,11 +1,6 @@
-BASE_TEST_DIR=tests/
+BASE_TEST_DIR=yaani/tests/
 
-# TEST_DIRS=$(addprefix ${BASE_TEST_DIR}, \
-# 				test_interface_context_parser \
-# 			)
-
-
-.PHONY: test
+.PHONY: test clean
 
 install:
 	pip3 install -r requirements.txt
@@ -13,6 +8,7 @@ install:
 test:
 	pytest ${BASE_TEST_DIR}
 
-# test:
-# 	pytest ${TEST_DIRS} -s
+clean:
+	find . -name '*.pyc' -delete
+	find . -name "__pycache__" -delete
 
