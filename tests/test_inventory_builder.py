@@ -1,7 +1,7 @@
 import pytest
 import mock
 
-from yaani import (
+from yaani.yaani import (
     InventoryBuilder
 )
 
