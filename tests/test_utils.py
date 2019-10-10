@@ -154,16 +154,35 @@ def test_parse_cli_args_ko(args):
                 "token": "Test_token"
             }
         }
-    })
+    }),
+    ({  # with url and all arguments except private_key
+        "netbox": {
+            "api": {
+                "url": "http://test.com",
+                "token": "Test_token",
+                "ssl_verify": True,
+                "private_key_file": "private key",
+            }
+        }
+    }),
+    ({  # with url and all arguments except private_key_file
+        "netbox": {
+            "api": {
+                "url": "http://test.com",
+                "token": "Test_token",
+                "ssl_verify": True,
+                "private_key": "private key"
+            }
+        }
+    }),
 ])
 def test_validate_api_ok(arg):
     # only api section
     assert validate_configuration(arg) is None
 
 
-
 @pytest.mark.parametrize("arg", [
-        ({  # containing devices with all
+        ({  # containing devices with filters
             "netbox": {
                 "api": {
                     "url": "http://test.com"
@@ -179,7 +198,7 @@ def test_validate_api_ok(arg):
                 }
             }
         }),
-        ({  # containing devices with all
+        ({  # containing devices with group_by
             "netbox": {
                 "api": {
                     "url": "http://test.com"
@@ -196,7 +215,7 @@ def test_validate_api_ok(arg):
                 }
             }
         }),
-        ({  # containing devices with all
+        ({  # containing devices with devices
             "netbox": {
                 "api": {
                     "url": "http://test.com"
@@ -210,7 +229,7 @@ def test_validate_api_ok(arg):
                 }
             }
         }),
-        ({  # containing devices with all
+        ({  # containing devices with host_vars
             "netbox": {
                 "api": {
                     "url": "http://test.com"
@@ -221,6 +240,73 @@ def test_validate_api_ok(arg):
                             "host_vars": [
                                 {"ip": "ip"}
                             ]
+                        },
+                    }
+                }
+            }
+        }),
+        ({  # containing devices with all
+            "netbox": {
+                "api": {
+                    "url": "http://test.com"
+                },
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "filters": {
+                                "role_id": 3
+                            },
+                            "group_by": [
+                                "device_role"
+                            ],
+                            "group_prefix": "dev_",
+                            "host_vars": [
+                                {"ip": "ip"}
+                            ],
+                        },
+                    }
+                }
+            }
+        }),
+        ({  # containing devices with host_vars and racks with group_by
+            "netbox": {
+                "api": {
+                    "url": "http://test.com"
+                },
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "host_vars": [
+                                {"ip": "ip"}
+                            ]
+                        },
+                        "racks": {
+                            "group_by": [
+                                "device_role"
+                            ],
+                        },
+                    }
+                }
+            }
+        }),
+        ({  # containing dcim with devices and virtualization with racks
+            "netbox": {
+                "api": {
+                    "url": "http://test.com"
+                },
+                "import": {
+                    "dcim": {
+                        "devices": {
+                            "host_vars": [
+                                {"ip": "ip"}
+                            ]
+                        },
+                    },
+                    "virtualization": {
+                        "racks": {
+                            "group_by": [
+                                "device_role"
+                            ],
                         },
                     }
                 }
