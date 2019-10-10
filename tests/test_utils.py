@@ -190,9 +190,9 @@ def test_validate_api_ok(arg):
                 "import": {
                     "dcim": {
                         "devices": {
-                            "filters": {
-                                "role_id": 3
-                            },
+                            "filters": [
+                                {"role_id": 3}
+                            ],
                         },
                     }
                 }
@@ -253,9 +253,9 @@ def test_validate_api_ok(arg):
                 "import": {
                     "dcim": {
                         "devices": {
-                            "filters": {
-                                "role_id": 3
-                            },
+                            "filters": [
+                                {"role_id": 3}
+                            ],
                             "group_by": [
                                 "device_role"
                             ],
