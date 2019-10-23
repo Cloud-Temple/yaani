@@ -247,6 +247,14 @@ def test_validate_api_ok(arg):
             }
         }
     }),
+    ({  # Additional property
+        "nebtox": {
+            "api": {
+                "url": "http://test.com",
+                "extra": "value"
+            }
+        }
+    }),
 ])
 def test_validate_api_ko(arg):
     """Validate API configuration structure errors"""
