@@ -661,31 +661,31 @@ def test_validate_import_ko(api_config, arg, msg):
 
 
 @pytest.mark.parametrize("arg", [
-        ({  # Two renders
-            "netbox": {
-                "render": [
-                    {
-                        "module": "test1",
-                        "name": "test1"
-                    },
-                    {
-                        "module": "2",
-                        "name": "2"
-                    },
-                ]
-            }
-        }),
-        ({  # One renders
-            "netbox": {
-                "render": [
-                    {
-                        "module": "test1",
-                        "name": "test1"
-                    },
-                ]
-            }
-        }),
-    ])
+    ({  # Two renders
+        "netbox": {
+            "render": [
+                {
+                    "module": "test1",
+                    "name": "test1"
+                },
+                {
+                    "module": "2",
+                    "name": "2"
+                },
+            ]
+        }
+    }),
+    ({  # One renders
+        "netbox": {
+            "render": [
+                {
+                    "module": "test1",
+                    "name": "test1"
+                },
+            ]
+        }
+    }),
+])
 def test_validate_render_ok(api_config, import_config, arg):
     arg["netbox"]["api"] = api_config
     arg["netbox"]["import"] = import_config
