@@ -82,10 +82,10 @@ def config():
                             "role_id": 20
                         },
                         "host_vars": [
-                                {"b2": "item1"}
+                            {"b2": "item1"}
                         ],
                         "group_by": [
-                                "i1",
+                            "i1",
                         ],
                         "group_prefix": "dev_",
                     }
