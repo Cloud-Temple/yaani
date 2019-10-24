@@ -76,7 +76,7 @@ def config():
                 "url": "url test"
             },
             "import": {
-                "dcim":{
+                "dcim": {
                     "devices": {
                         "filters": {
                             "role_id": 20
@@ -593,7 +593,8 @@ def test_load_element_vars_ok(element_name, inventory, host_vars,
 )
 def test_execute_import_ok(inv_builder, application, inventory,
                            import_type, get_element_list, expected, mocker):
-    import_options = inv_builder._import_section.get(application, {}).get(import_type, {})
+    import_options = inv_builder._import_section.get(application, {})\
+        .get(import_type, {})
 
     mocker.patch.object(
         InventoryBuilder,
@@ -607,33 +608,3 @@ def test_execute_import_ok(inv_builder, application, inventory,
         import_options=import_options,
         inventory=inventory
     ) is None
-
-
-"""
-@pytest.mark.parametrize("application, import_type", [
-    (
-        "dcim",
-        "devices",
-    ),
-])
-def test_get_element_list_ok(application, import_type, inv_builder):
-    filters = inv_builder._import_section.get(application, {}).get(import_type, {}).get('filters', None)
-
-    assert inv_builder._get_elements_list(
-        application,
-        import_type,
-        filters=filters,
-        specific_host=inv_builder._host
-    )
-    import_options = inv_builder._import_section.get(
-        application, {}
-    ).get(import_type, {})
-
-    assert inv_builder._execute_import(
-        application,
-        import_type,
-        import_options,
-        inventory
-    ) is None
-    assert inventory == expected
-"""
