@@ -2,8 +2,8 @@ import pytest
 import mock
 
 from yaani.yaani import (
-    InventoryBuilder
-)
+    InventoryBuilder,
+    resolve_expression)
 
 
 @pytest.fixture
@@ -76,12 +76,21 @@ def config():
                 "url": "url test"
             },
             "import": {
-                "devices": {
-                    "filters": {
-                        "role_id": 20
+                "dcim":{
+                    "devices": {
+                        "filters": {
+                            "role_id": 20
+                        },
+                        "host_vars": [
+                                {"b2": "item1"}
+                        ],
+                        "group_by": [
+                                "i1",
+                        ],
+                        "group_prefix": "dev_",
                     }
                 }
-            }
+            },
         }
     }
     return conf
@@ -285,7 +294,7 @@ def test_data():
         ]
     ),
 ])
-def test_resolve_expression(inv_builder, namespaces, key_path, expected):
+def test_resolve_expression_ok(inv_builder, namespaces, key_path, expected):
     assert inv_builder._resolve_expression(key_path, namespaces) == expected
 
 
@@ -350,6 +359,31 @@ def test_resolve_expression(inv_builder, namespaces, key_path, expected):
             },
         }
     ),
+    (  # Non existing group with existing element
+        "item1",
+        "group1",
+        {
+            "group2": {
+                "hosts": [
+
+
+                    "item1"
+                ]
+            }
+        },
+        {
+            "group2": {
+                "hosts": [
+                    "item1"
+                ]
+            },
+            "group1": {
+                "hosts": [
+                    "item1"
+                ]
+            },
+        }
+    ),
 ])
 def test_add_element_to_group_ok(inv_builder, element_name,
                                  group_name, inventory, expected):
@@ -361,111 +395,109 @@ def test_add_element_to_group_ok(inv_builder, element_name,
 
 
 @pytest.mark.parametrize(
-    "element_name,application,"
-    "import_type,inventory,namespace,expected",
+    "element_name, inventory, namespace, group_by, "
+    "group_prefix, expected",
     [
         (
             "item1",
-            "dcim",
-            "devices",
             {"_meta": {"hostvars": {}}},
-            {"import": dict(name="host1"), "build": {}, "sub-import": {}},
-            {},
+            {"import": {"i1": "iv1", "i2": "iv2"}},
+            {'.i1', '.i2'},
+            "dev_",
+            {'_meta': {'hostvars': {}},
+             'dev_iv2': {'hosts': ['item1']},
+             'dev_iv1': {'hosts': ['item1']}},
         ),
         (
-            "item1",
-            "virtualization",
-            "racks",
+            "item2",
             {"_meta": {"hostvars": {}}},
-            {"import": dict(name="host1"), "build": {}, "sub-import": {}},
-            {},
+            {"import": {"i2": "iv2", "i3": "iv3"}},
+            {'.i3'},
+            "",
+            {'_meta': {'hostvars': {}},
+             'iv3': {'hosts': ['item2']}},
         ),
         (
-            "item1",
-            "dcim",
-            "devices",
-            {"_meta": {"hostvars": {}}},
-            {"import": dict(name="host1"), "build": {}, "sub-import": {}},
-            {},
+            "item3",
+            {"_meta": {"hostvars": {'item0': {'b0': 'bv0'}}}},
+            {"import": {"i1": "iv1", "i2": 0, "i3": "iv3"}},
+            {'.i2'},
+            None,
+            {'_meta': {'hostvars': {'item0': {'b0': 'bv0'}}},
+             0: {'hosts': ['item3']}},
+        ),
+        (
+            "item4",
+            {"_meta": {"hostvars": {'item0': {'b0': 'bv0'}}}},
+            {"import": {"i1": "iv1", "i2": None, "i3": "iv3"}},
+            {'.i2'},
+            "",
+            {'_meta': {'hostvars': {'item0': {'b0': 'bv0'}}}},
+        ),
+        (
+            "item5",
+            {"_meta": {"hostvars": {'item0': {'b0': 'bv0'}}}},
+            {"import": {"i1": "iv1", "i2": "", "i3": "iv3"}},
+            {'.i2'},
+            "test_",
+            {'_meta': {'hostvars': {'item0': {'b0': 'bv0'}}},
+                'test_': {'hosts': ['item5']}},
         ),
     ]
 )
-def test_execute_group_by_ok(inv_builder, element_name, application,
-                             import_type, inventory, namespace, expected):
-    import_options = inv_builder._import_section.get(
-        application, {}
-    ).get(import_type, {})
-
+def test_execute_group_by_ok(inv_builder, element_name, group_by,
+                             group_prefix, namespace, inventory, expected):
     assert inv_builder._execute_group_by(
-        element_name,
-        import_options.get('group_by', None),
-        import_options.get('group_prefix', None),
-        inventory,
-        namespace
+        element_index=element_name,
+        group_by=group_by,
+        group_prefix=group_prefix,
+        inventory=inventory,
+        namespaces=namespace
     ) is None
-    # assert inventory == expected
-
-
-# test_load_element_vars_ok
+    assert inventory == expected
 
 
 @pytest.mark.parametrize(
-    "element_name,application,import_type,"
-    "hostvalue,inventory,expected",
+    "element_name, inventory, host_vars, namespace, expected",
     [
         (
-            "BK A07-0",
-            "dcim",
-            "devices",
-            "hostvalue",
+            "item1",
             {"_meta": {"hostvars": {}}},
-            {
-                '_meta': {'hostvars': {}},
-                'devices': {'hosts': ['BK A07-0']},
-                'all': {'hosts': ['BK A07-0']}
-            },
+            [{'b1': 'b#.b2'}],
+            {"build": {"b1": "bv1", "b2": "bv2"}, "import": {}},
+            {'_meta': {'hostvars': {'item1': {'b1': 'bv2', 'b2': 'bv2'}}}},
         ),
         (
-            "amf-1.cpe0009",
-            "virtualization",
-            "racks",
-            "",
+            "item2",
             {"_meta": {"hostvars": {}}},
-            {
-                '_meta': {'hostvars': {}},
-                'racks': {'hosts': ['amf-1.cpe0009']},
-                'all': {'hosts': ['amf-1.cpe0009']}
-            },
+            [{'b1': 'b#.b2'}],
+            {"build": {"b1": "bv1", "b2": "bv2"}, "import": {}},
+            {'_meta': {'hostvars': {'item2': {'b1': 'bv2', 'b2': 'bv2'}}}},
         ),
         (
-            "BK A07-0",
-            "dcim",
-            "devices",
-            None,
-            {"_meta": {"hostvars": {}}},
-            {
-                '_meta': {'hostvars': {}},
-                'devices': {'hosts': ['BK A07-0']},
-                'all': {'hosts': ['BK A07-0']}
-            },
+            "item3",
+            {"_meta": {"hostvars": {'item0': {'b0': 'bv0'}}}},
+            [{'b2': 'b#.b1'}],
+            {"build": {"b1": "bv1", "b2": "bv2"}, "import": {}},
+            {'_meta': {'hostvars': {'item0': {'b0': 'bv0'},
+                                    'item3': {'b1': 'bv1', 'b2': 'bv1'}}}},
         ),
-    ]
-)
-def test_add_element_to_inventory_ok(inv_builder, element_name,
-                                     application, import_type, hostvalue,
-                                     inventory, expected):
-    import_options = inv_builder._import_section.get(
-        application, {}
-    ).get(import_type, {})
-
-    assert inv_builder._add_element_to_inventory(
-        element_name,
-        dict(name=hostvalue),
-        inventory,
-        import_type,
-        import_options.get('group_by', None),
-        import_options.get('group_prefix', None),
-        import_options.get('host_vars', None)
+        (
+            "item4",
+            {"_meta": {"hostvars": {'item0': {'b0': 'bv0'}}}},
+            [{'b2': 'b#.b1'}],
+            {"build": {"b1": "bv1", "b2": "bv2"}, "import": {}},
+            {'_meta': {'hostvars': {'item0': {'b0': 'bv0'},
+                                    'item4': {'b1': 'bv1', 'b2': 'bv1'}}}},
+        ),
+    ])
+def test_load_element_vars_ok(element_name, inventory, host_vars,
+                              namespace, expected, inv_builder):
+    assert inv_builder._load_element_vars(
+        element_name=element_name,
+        inventory=inventory,
+        host_vars=host_vars,
+        namespaces=namespace
     ) is None
     assert inventory == expected
 
@@ -475,18 +507,27 @@ def test_add_element_to_inventory_ok(inv_builder, element_name,
     [
         (
             "dcim",
-            "devices",
+            "racks",
             {"_meta": {"hostvars": {}}},
-            [dict(name="BK A07-0"), dict(name="amf-1.cpe0009")],
+            [
+                dict(id=1, name="item1"),
+                dict(id=2, name="item2")
+            ],
             {
                 '_meta': {
                     'hostvars': {}
                 },
                 'devices': {
-                    'hosts': ['BK A07-0', 'amf-1.cpe0009']
+                    'hosts': [
+                        'item1',
+                        'item2'
+                    ]
                 },
                 'all': {
-                    'hosts': ['BK A07-0', 'amf-1.cpe0009']
+                    'hosts': [
+                        'item1',
+                        'item2'
+                    ]
                 }
             }
         ),
@@ -495,9 +536,9 @@ def test_add_element_to_inventory_ok(inv_builder, element_name,
             "racks",
             {"_meta": {"hostvars": {}}},
             [
-                dict(name="BK A07-0"),
-                dict(name="amf-1.cpe0009"),
-                dict(name="KO-15.dic0032")
+                dict(id=1, name="item1"),
+                dict(id=2, name="item2"),
+                dict(id=3, name="item3")
             ],
             {
                 '_meta': {
@@ -505,16 +546,45 @@ def test_add_element_to_inventory_ok(inv_builder, element_name,
                 },
                 'racks': {
                     'hosts': [
-                        'BK A07-0',
-                        'amf-1.cpe0009',
-                        'KO-15.dic0032'
+                        'item1',
+                        'item2',
+                        'item3'
                     ]
                 },
                 'all': {
                     'hosts': [
-                        'BK A07-0',
-                        'amf-1.cpe0009',
-                        'KO-15.dic0032'
+                        'item1',
+                        'item2',
+                        'item3'
+                    ]
+                }
+            }
+        ),
+        (
+            "virtualization",
+            "racks",
+            {"_meta": {"hostvars": {}}},
+            [
+                dict(id=1, name="item1"),
+                dict(id=2, name=""),
+                dict(id=3, name=None)
+            ],
+            {
+                '_meta': {
+                    'hostvars': {}
+                },
+                'racks': {
+                    'hosts': [
+                        'item1',
+                        '',
+                        None
+                    ]
+                },
+                'all': {
+                    'hosts': [
+                        'item1',
+                        '',
+                        None
                     ]
                 }
             }
@@ -523,10 +593,37 @@ def test_add_element_to_inventory_ok(inv_builder, element_name,
 )
 def test_execute_import_ok(inv_builder, application, inventory,
                            import_type, get_element_list, expected, mocker):
+    import_options = inv_builder._import_section.get(application, {}).get(import_type, {})
+
     mocker.patch.object(
         InventoryBuilder,
         "_get_elements_list",
         return_value=get_element_list
+    )
+
+    assert inv_builder._execute_import(
+        application=application,
+        import_type=import_type,
+        import_options=import_options,
+        inventory=inventory
+    ) is None
+
+
+"""
+@pytest.mark.parametrize("application, import_type", [
+    (
+        "dcim",
+        "devices",
+    ),
+])
+def test_get_element_list_ok(application, import_type, inv_builder):
+    filters = inv_builder._import_section.get(application, {}).get(import_type, {}).get('filters', None)
+
+    assert inv_builder._get_elements_list(
+        application,
+        import_type,
+        filters=filters,
+        specific_host=inv_builder._host
     )
     import_options = inv_builder._import_section.get(
         application, {}
@@ -539,3 +636,4 @@ def test_execute_import_ok(inv_builder, application, inventory,
         inventory
     ) is None
     assert inventory == expected
+"""

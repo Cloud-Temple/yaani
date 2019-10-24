@@ -317,6 +317,9 @@ def test_validate_api_ko(arg):
         }),
         ({  # containing devices with sub-imports
             "netbox": {
+                "api": {
+                    "url": "http://test.com"
+                },
                 "import": {
                     "dcim": {
                         "devices": {
@@ -354,6 +357,9 @@ def test_validate_api_ko(arg):
         }),
         ({  # containing devices with all
             "netbox": {
+                "api": {
+                    "url": "http://test.com"
+                },
                 "import": {
                     "dcim": {
                         "devices": {
@@ -401,6 +407,9 @@ def test_validate_api_ko(arg):
         }),
         ({  # containing devices with host_vars and racks with group_by
             "netbox": {
+                "api": {
+                    "url": "http://test.com"
+                },
                 "import": {
                     "dcim": {
                         "devices": {
@@ -425,9 +434,9 @@ def test_validate_api_ko(arg):
                 "import": {
                     "dcim": {
                         "devices": {
-                            "filters": {
-                                "role_id": 3
-                            },
+                            "filters": [
+                                {"role_id": 3}
+                            ],
                         },
                     }
                 }
@@ -488,9 +497,9 @@ def test_validate_api_ko(arg):
                 "import": {
                     "dcim": {
                         "devices": {
-                            "filters": {
-                                "role_id": 3
-                            },
+                            "filters": [
+                                {"role_id": 3}
+                            ],
                             "group_by": [
                                 "device_role"
                             ],
@@ -554,7 +563,7 @@ def test_validate_import_ok(api_config, arg):
     assert validate_configuration(arg) is None
 
 
-@pytest.mark.parametrize("arg,msg", [
+@pytest.mark.parametrize("arg, msg", [
     (
         {  # empty import
             "netbox": {
@@ -686,7 +695,7 @@ def test_validate_import_ok(api_config, arg):
         "is too short"
     ),
     (
-        {  # bad group_by type
+        {  # bad host_vars type
             "netbox": {
                 "import": {
                     "dcim": {
@@ -702,7 +711,7 @@ def test_validate_import_ok(api_config, arg):
         "is not of type 'array"
     ),
     (
-        {  # bad group_by type
+        {  # bad host_vars extra key
             "netbox": {
                 "import": {
                     "dcim": {
@@ -721,7 +730,7 @@ def test_validate_import_ok(api_config, arg):
         "has too many properties"
     ),
     (
-        {  # bad group_by type
+        {  # bad host_vars extra key
             "netbox": {
                 "import": {
                     "dcim": {
@@ -743,7 +752,7 @@ def test_validate_import_ok(api_config, arg):
         "has too many properties"
     ),
     (
-        {  # bad group_by type
+        {  # host_vars empty dict
             "netbox": {
                 "import": {
                     "dcim": {
@@ -771,6 +780,20 @@ def test_validate_import_ko(api_config, arg, msg):
 
 
 @pytest.mark.parametrize("arg", [
+    ({  # full api section and import section containing devices with all
+        # options
+        "netbox": {
+            "api": {
+                "url": "http://test.com"
+            },
+            "render": [
+                {
+                    "module": "test",
+                    "name": "test"
+                },
+            ]
+        }
+    }),
     ({  # Two renders
         "netbox": {
             "render": [
@@ -791,28 +814,7 @@ def test_validate_import_ko(api_config, arg, msg):
                 {
                     "module": "test1",
                     "name": "test1"
-                },
-            ]
-        }
-    }),
-])
-def test_validate_import_ok(arg):
-    # full api section with import section
-    assert validate_configuration(arg) is None
-
-
-@pytest.mark.parametrize("arg", [
-    ({  # full api section and import section containing devices with all
-        # options
-        "netbox": {
-            "api": {
-                "url": "http://test.com"
-            },
-            "render": [
-                {
-                    "module": "test",
-                    "name": "test"
-                },
+                }
             ]
         }
     }),
@@ -847,7 +849,7 @@ def test_validate_render_ok(api_config, import_config, arg):
         "Additional properties are not allowed"
     ),
 ])
-def test_validate_import_ko(api_config, import_config, arg, msg):
+def test_validate_render_ko(api_config, import_config, arg, msg):
     # full api section with import section
     arg["netbox"]["api"] = api_config
     arg["netbox"]["import"] = import_config
