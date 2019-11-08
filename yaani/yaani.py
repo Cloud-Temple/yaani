@@ -391,9 +391,9 @@ class InventoryBuilder:
                     else:
                         # Add the optional prefix
                         if group_prefix:
-                            group_name = group_prefix + computed_group
+                            group_name = group_prefix + str(computed_group)
                         else:
-                            group_name = computed_group
+                            group_name = str(computed_group)
                         # Insert the element in the propper group
                         self._add_element_to_group(
                             element_name=element_index,
