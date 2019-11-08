@@ -17,19 +17,92 @@ from lark import Lark, Transformer
 import re
 
 from jsonschema import validate
+from jsonschema.exceptions import ValidationError
 import pynetbox
-from typing import (
-    Optional,
-    Dict,
-    List,
-    Union
-)
+from pynetbox.core.query import RequestError
 import pyjq
 
 # The name of the Environment variable where to find the path towards the
 # configuration file
 DEFAULT_ENV_CONFIG_FILE = "YAANI_CONFIG_FILE"
 DEFAULT_ENV_MODULES_DIR = "YAANI_MODULES_PATH"
+
+
+class error:
+    BAD_PYNETBOX_API_ARGS = {
+        "msg": "The arguments given for Netbox API connection are incorrect",
+        "code": 1
+    }
+    CANNOT_OPEN_CONFIG_FILE = {
+        "msg": "Cannot open configuration file.\n{}",
+        "code": 2
+    }
+    CANNOT_PARSE_CONFIG_FILE = {
+        "msg": "Unable to parse configuration file: \n{}",
+        "code": 3
+    }
+    BAD_CONFIG_FILE_STRUCTURE = {
+        "msg": "The configuration file is wrongly structured: \n{}",
+        "code": 4
+    }
+    CANNOT_COMPUTE_GEN_ID = {
+        "msg": (
+            "The id key is not present in an unnamed host. "
+            "Generic identifier cannot be computed \n"
+        ),
+        "code": 5
+    }
+    BAD_API_ENDPOINT = {
+        "msg": "The netbox api endpoint {}/{}/ could not be found.",
+        "code": 6
+    }
+    CUSTOM_MODULE_NOT_IMPORTED = {
+        "msg": "The custom module {} could not be imported.",
+        "code": 7
+    }
+    CUSTOM_MODULE_NOT_FOUND = {
+        "msg": "The custom module {} could not be found: \n{}",
+        "code": 8
+    }
+    CUSTOM_FUNC_NOT_FOUND = {
+        "msg": (
+            "The custom function {} could not be found in the custom "
+            "module {}"
+        ),
+        "code": 9
+    }
+    CUSTOM_ARGS = {
+        "msg": "Could not parse custom module and function names",
+        "code": 10
+    }
+    JQ_PROCESSING = {
+        "msg": "An error occured with the following jq query: {}\n{}",
+        "code": 11
+    }
+    CUSTOM_EXECUTION_FAILED = {
+        "msg": "An error occured during custom function {} execution: \n{}",
+        "code": 12
+    }
+    BAD_SI_KEY = {
+        "msg": (
+            "Bad key '{}' in sub-import section. Variable not defined in "
+            "sub_import['vars'] section."
+        ),
+        "code": 13
+    }
+    NON_UNIQUE_SI_VALUE = {
+        "msg": (
+            "The key '{}', specified as an sub-import index key, leads to a "
+            "non unique value. Each key of the resulting dict must be "
+            "unique. Try using a different variable name as index."
+        ),
+        "code": 14
+    }
+
+
+def exit(error, *args):
+    sys.stderr.write(error["msg"].format(*args))
+    sys.exit(error["code"])
 
 
 class StackTransformer(Transformer):
@@ -56,39 +129,22 @@ class StackTransformer(Transformer):
             var_configuration = self._vars_definition[loading_var]
         except KeyError:
             # The var is not declared, exit program.
-            sys.exit(
-                "Bad key %s in sub-import section. Variable not defined in "
-                "sub_import.vars section." % loading_var
-            )
+            exit(error.BAD_SI_KEY, loading_var)
 
         # Access netbox API endpoint of wanted object
-        try:
-            app = getattr(
-                self._api_connector,
-                var_configuration['application']
-            )
-            endpoint = getattr(app, var_configuration['type'])
-        except AttributeError:
-            sys.exit(
-                "The netbox api endpoint %s/%s/ "
-                "cannot be found" % (
-                    var_configuration['application'],
-                    var_configuration['type']
-                )
-            )
+        app = getattr(
+            self._api_connector,
+            var_configuration['application']
+        )
+        endpoint = getattr(app, var_configuration['type'])
 
         # Resolve the actual filter value
         # ex: "device_id": "id" --> "device_id": 123
         filter_args = {}
-        for k, v in var_configuration['filter'].items():
-            try:
-                filter_args[k] = resolve_expression(
-                    v, parent_namespace, first=True
-                )
-            except KeyError:
-                sys.exit(
-                    "The key given as a filter value '%s' does not exist." % v
-                )
+        for parent_key, child_keypath in var_configuration['filter'].items():
+            filter_args[parent_key] = resolve_expression(
+                child_keypath, parent_namespace, first=True
+            )
 
         # fetch sub elements from netbox
         if "id" in list(filter_args.keys()):
@@ -107,19 +163,16 @@ class StackTransformer(Transformer):
         acc = 0
         for e in elements:
             # Resolve the actual index value
-            if list_mode is False:
-                index_value = getattr(e, index_key_name)
-            else:
+            if list_mode:
                 index_value = str(acc)
                 acc += 1
+            else:
+                index_value = getattr(e, index_key_name)
 
             if index_value in list(ret.keys()):
                 # The index key must lead to a unique value, avoid duplicate
                 # e[index_key] must be unique
-                sys.exit(
-                    "The key '%s', specified as an index key, is resolved to "
-                    "non unique values." % index_value
-                )
+                exit(error.NON_UNIQUE_SI_VALUE, index_value)
             ret[index_value] = dict(e)
         return ret
 
@@ -127,19 +180,31 @@ class StackTransformer(Transformer):
         return n[0]
 
     def nested_path(self, n):
+        """Treat the nested_path grammar rule
+
+        Args:
+            n (list): The list of children nodes. Here, variable names
+                separated by dots.
+
+        Returns:
+            dict: Description
+        """
         sub_pointer = [self._namespaces['sub-import']]
+        # At first, the parent namespace is the data extracted from Netbox.
         parent_ns = self._namespaces['import']
 
-        for path in map(lambda x: str(x), n):
+        for var_name in map(lambda x: str(x), n):
             l = []
+            # Go in depth
             for v in sub_pointer:
                 if parent_ns is None:
                     parent_ns = v
-                v[path] = self._import_var(
+                v[var_name] = self._import_var(
                     parent_namespace=parent_ns,
-                    loading_var=path
+                    loading_var=var_name
                 )
-                l += list(v[path].values())
+                l += list(v[var_name].values())
+            # Nullify the parent namespace
             parent_ns = None
             sub_pointer = l
 
@@ -161,7 +226,10 @@ class InventoryBuilder:
         self._import_section = self._config_data.get('import', {})
 
         # Create the api connector
-        self._nb = pynetbox.api(**self._config_api)
+        try:
+            self._nb = pynetbox.api(**self._config_api)
+        except TypeError:
+            exit(error.BAD_PYNETBOX_API_ARGS)
 
         # Expression resolutions objects
         stack_grammar = """
@@ -185,7 +253,7 @@ class InventoryBuilder:
             dict: The inventory
         """
         # Check if both mode are deactivated
-        if not self._list_mode and not self._host:
+        if not (self._list_mode or self._host):
             return {}
 
         inventory = self._init_inventory()
@@ -279,18 +347,15 @@ class InventoryBuilder:
             # config file
             for d in host_vars:
                 for key, value in d.items():
-                    try:
-                        namespaces['build'][key] = self._resolve_expression(
-                            key_path=value,
-                            namespaces=namespaces
-                        )
-                    except KeyError:
-                        sys.exit("Error: Key '%s' not found" % value)
+                    namespaces['build'][key] = self._resolve_expression(
+                        key_path=value,
+                        namespaces=namespaces
+                    )
 
             # Add the loaded variables in the inventory under the proper
             # section (name of the host)
             inventory['_meta']['hostvars'].update(
-                {element_name: dict(namespaces['build'])}
+                {element_name: namespaces['build']}
             )
 
     def _execute_sub_import(self, sub_import, namespaces):
@@ -316,7 +381,7 @@ class InventoryBuilder:
                                   obj_type, import_options={}):
         # Declare namespaces
         namespaces = {
-            "import": dict(host_dict),
+            "import": host_dict,
             "build": {},
             "sub-import": {}
 
@@ -324,7 +389,7 @@ class InventoryBuilder:
 
         # Extract configuration statements from import options
         group_by = import_options.get('group_by', None)
-        group_prefix = import_options.get('group_prefix', None)
+        group_prefix = import_options.get('group_prefix', "")
         host_vars = import_options.get('host_vars', [])
         sub_import = import_options.get('sub_import', [])
 
@@ -378,10 +443,7 @@ class InventoryBuilder:
                         # Iterate over every tag
                         for value in computed_group:
                             # Add the optional prefix
-                            if group_prefix is None:
-                                group_name = value
-                            else:
-                                group_name = group_prefix + value
+                            group_name = group_prefix + str(value)
                             # Insert the element in the propper group
                             self._add_element_to_group(
                                 element_name=element_index,
@@ -390,10 +452,7 @@ class InventoryBuilder:
                             )
                     else:
                         # Add the optional prefix
-                        if group_prefix:
-                            group_name = group_prefix + str(computed_group)
-                        else:
-                            group_name = str(computed_group)
+                        group_name = group_prefix + str(computed_group)
                         # Insert the element in the propper group
                         self._add_element_to_group(
                             element_name=element_index,
@@ -440,7 +499,7 @@ class InventoryBuilder:
             group_name=group_name,
             inventory=inventory
         )
-        if element_name not in inventory.get(group_name).get('hosts'):
+        if element_name not in inventory.get(group_name, {}).get('hosts', []):
             inventory[group_name]['hosts'].append(element_name)
         return inventory
 
@@ -458,22 +517,14 @@ class InventoryBuilder:
             specific_host (str, optional): The name of a specific host which
                 host vars must be returned alone.
         """
-        try:
-            app_obj = getattr(
-                self._nb,
-                application
-            )
-            endpoint = getattr(app_obj, object_type)
-        except AttributeError:
-            sys.exit(
-                "The netbox api endpoint %s/%s/ "
-                "cannot be found" % (
-                    application,
-                    object_type
-                )
-            )
+        app_obj = getattr(
+            self._nb,
+            application
+        )
+        endpoint = getattr(app_obj, object_type)
 
         filters = import_options.get("filters", None)
+
         # specific host handling
         if specific_host is not None:
             result = endpoint.filter(name=specific_host)
@@ -497,6 +548,9 @@ class InventoryBuilder:
         else:
             result = endpoint.all()
 
+        if result is None:
+            result = []
+
         return result
 
     def _get_identifier(self, host, obj_type):
@@ -517,10 +571,7 @@ class InventoryBuilder:
             try:
                 r = "%s_%s" % (obj_type, host['id'])
             except KeyError:
-                sys.exit(
-                    "The id key is not present in an unnamed host. Generic "
-                    "identifier cannot be computed"
-                )
+                exit(error.CANNOT_COMPUTE_GEN_ID)
         return r
 
     def _initialize_group(self, group_name, inventory):
@@ -759,28 +810,28 @@ def validate_configuration(configuration):
             }
         }
     }
+    try:
+        v = validate(instance=configuration, schema=config_schema)
+    except ValidationError as err:
+        exit(error.BAD_CONFIG_FILE_STRUCTURE, err)
+    return v
 
-    return validate(instance=configuration, schema=config_schema)
 
-
-def load_config_file(config_file_path: str):
+def load_config_file(config_file_path):
     """ Load the configuration file and returns its parsed content.
 
     Args:
-            config_file_path (str): The path towards the configuration file
+        config_file_path (str): The path towards the configuration file
     """
     try:
         with open(config_file_path, 'r') as file:
             parsed_config = yaml.safe_load(file)
     except IOError as io_error:
         # Handle file level exception
-        sys.exit("Error: Cannot open configuration file.\n%s" % io_error)
+        exit(error.CANNOT_OPEN_CONFIG_FILE, io_error)
     except yaml.YAMLError as yaml_error:
         # Handle Yaml level exceptions
-        sys.exit(
-            "Error: Unable to parse configuration file: %s" %
-            yaml_error
-        )
+        exit(error.CANNOT_PARSE_CONFIG_FILE, yaml_error)
 
     # If syntax of configuration file is valid, nothing happens
     # Beware, syntax can be valid while semantic is not
@@ -798,10 +849,15 @@ def dump_json_inventory(inventory):
     print(json.dumps(inventory))
 
 
-def resolve_expression(query: str, namespace, first: bool):
+def resolve_expression(query, namespace, first):
     if first:
-        return pyjq.first(query, namespace)
-    return pyjq.all(query, namespace)
+        jq_method = pyjq.first
+    else:
+        jq_method = pyjq.all
+    try:
+        return jq_method(query, namespace)
+    except Exception as err:
+        exit(error.JQ_PROCESSING, query, err)
 
 
 def render_inventory(render_configuration, inventory):
@@ -812,7 +868,7 @@ def render_inventory(render_configuration, inventory):
                 custom_module_name = fdef['module']
                 func_name = fdef['name']
             except KeyError:
-                sys.exit("Could not parse custom module and function names")
+                exit(error.CUSTOM_ARGS)
 
             try:
                 # Define a default dir for custom modules
@@ -827,25 +883,22 @@ def render_inventory(render_configuration, inventory):
                 custom_module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(custom_module)
             except ImportError:
-                sys.exit(
-                    "The custom module %s could not be "
-                    "imported" % (custom_module_name)
-                )
+                exit(error.CUSTOM_MODULE_NOT_IMPORTED, custom_module_name)
             except FileNotFoundError as err:
-                sys.exit("The custom module could not be found. %s" % str(err))
+                exit(error.CUSTOM_MODULE_NOT_FOUND, custom_module_name, str(err))
 
             try:
                 custom_func = getattr(custom_module, func_name)
             except AttributeError:
-                sys.exit(
-                    "The custom function %s could not be found in the custom "
-                    "module" % (func_name)
-                )
+                exit(error.CUSTOM_FUNC_NOT_FOUND, func_name, custom_module_name)
 
             func_array.append(custom_func)
 
         for f in func_array:
-            inventory = f(inventory)
+            try:
+                inventory = f(inventory)
+            except Exception as err:
+                exit(error.CUSTOM_EXECUTION_FAILED, f, err)
 
     dump_json_inventory(inventory)
 

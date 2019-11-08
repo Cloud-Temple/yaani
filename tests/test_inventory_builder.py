@@ -144,7 +144,7 @@ def test_get_identifier_ko(inv_builder, host, obj_type):
     """Test the get_identifier method raises an error when it should"""
     with pytest.raises(SystemExit) as err:
         inv_builder._get_identifier(host, obj_type)
-    assert "The id key is not present" in str(err.value)
+    assert 5 == err.value.code
 
 
 @pytest.fixture
@@ -487,9 +487,9 @@ def test_add_element_to_group_ok(inv_builder, element_name,
             {"_meta": {"hostvars": {'item0': {'b0': 'bv0'}}}},
             {"import": {"i1": "iv1", "i2": 0, "i3": "iv3"}},
             {'.i2'},
-            None,
+            "",
             {'_meta': {'hostvars': {'item0': {'b0': 'bv0'}}},
-             0: {'hosts': ['item3']}},
+             '0': {'hosts': ['item3']}},
         ),
         (
             "item4",

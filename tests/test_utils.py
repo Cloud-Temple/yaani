@@ -258,8 +258,9 @@ def test_validate_api_ok(arg):
 ])
 def test_validate_api_ko(arg):
     """Validate API configuration structure errors"""
-    with pytest.raises(ValidationError):
+    with pytest.raises(SystemExit) as err:
         validate_configuration(arg)
+    assert 4 == err.value.code
 
 
 @pytest.mark.parametrize("arg", [
@@ -563,14 +564,13 @@ def test_validate_import_ok(api_config, arg):
     assert validate_configuration(arg) is None
 
 
-@pytest.mark.parametrize("arg, msg", [
+@pytest.mark.parametrize("arg", [
     (
         {  # empty import
             "netbox": {
                 "import": {}
             }
-        },
-        "does not have enough properties"
+        }
     ),
     (
         {  # forgot app
@@ -581,8 +581,7 @@ def test_validate_import_ok(api_config, arg):
                     }
                 }
             }
-        },
-        "'prefix' is not of type 'object'"
+        }
     ),
     (
         {  # empty app
@@ -591,8 +590,7 @@ def test_validate_import_ok(api_config, arg):
                     "dcim": {}
                 }
             }
-        },
-        "does not have enough properties"
+        }
     ),
     (
         {  # empty type
@@ -603,8 +601,7 @@ def test_validate_import_ok(api_config, arg):
                     }
                 }
             }
-        },
-        "does not have enough properties"
+        }
     ),
     (
         {  # Extra vars
@@ -617,8 +614,7 @@ def test_validate_import_ok(api_config, arg):
                     }
                 }
             }
-        },
-        "Additional properties are not allowed"
+        }
     ),
     (
         {  # bad prefix type
@@ -631,8 +627,7 @@ def test_validate_import_ok(api_config, arg):
                     }
                 }
             }
-        },
-        "is not of type 'string"
+        }
     ),
     (
         {  # bad filters type
@@ -647,8 +642,7 @@ def test_validate_import_ok(api_config, arg):
                     }
                 }
             }
-        },
-        "is not of type 'array"
+        }
     ),
     (
         {  # bad group_by type
@@ -663,8 +657,7 @@ def test_validate_import_ok(api_config, arg):
                     }
                 }
             }
-        },
-        "is not of type 'array"
+        }
     ),
     (
         {  # empty group by
@@ -677,8 +670,7 @@ def test_validate_import_ok(api_config, arg):
                     }
                 }
             }
-        },
-        "is too short"
+        }
     ),
     (
         {  # empty hostvars
@@ -691,8 +683,7 @@ def test_validate_import_ok(api_config, arg):
                     }
                 }
             }
-        },
-        "is too short"
+        }
     ),
     (
         {  # bad host_vars type
@@ -707,8 +698,7 @@ def test_validate_import_ok(api_config, arg):
                     }
                 }
             }
-        },
-        "is not of type 'array"
+        }
     ),
     (
         {  # bad host_vars extra key
@@ -726,8 +716,7 @@ def test_validate_import_ok(api_config, arg):
                     }
                 }
             }
-        },
-        "has too many properties"
+        }
     ),
     (
         {  # bad host_vars extra key
@@ -748,8 +737,7 @@ def test_validate_import_ok(api_config, arg):
                     }
                 }
             }
-        },
-        "has too many properties"
+        }
     ),
     (
         {  # host_vars empty dict
@@ -767,16 +755,15 @@ def test_validate_import_ok(api_config, arg):
                     }
                 }
             }
-        },
-        "does not have enough properties"
+        }
     ),
 ])
-def test_validate_import_ko(api_config, arg, msg):
+def test_validate_import_ko(api_config, arg):
     # full api section with import section
     arg["netbox"]["api"] = api_config
-    with pytest.raises(ValidationError) as err:
+    with pytest.raises(SystemExit) as err:
         validate_configuration(arg)
-    assert msg in str(err.value)
+    assert 4 == err.value.code
 
 
 @pytest.mark.parametrize("arg", [
@@ -825,14 +812,13 @@ def test_validate_render_ok(api_config, import_config, arg):
     assert validate_configuration(arg) is None
 
 
-@pytest.mark.parametrize("arg,msg", [
+@pytest.mark.parametrize("arg", [
     (
         {
             "netbox": {
                 "render": []
             }
-        },
-        "is too short"
+        }
     ),
     (
         {
@@ -845,17 +831,16 @@ def test_validate_render_ok(api_config, import_config, arg):
                     }
                 ]
             }
-        },
-        "Additional properties are not allowed"
+        }
     ),
 ])
-def test_validate_render_ko(api_config, import_config, arg, msg):
+def test_validate_render_ko(api_config, import_config, arg):
     # full api section with import section
     arg["netbox"]["api"] = api_config
     arg["netbox"]["import"] = import_config
-    with pytest.raises(ValidationError) as err:
+    with pytest.raises(SystemExit) as err:
         validate_configuration(arg)
-    assert msg in str(err.value)
+    assert 4 == err.value.code
 
 
 @pytest.mark.parametrize("arg", [
@@ -1059,5 +1044,7 @@ def test_validate_render_ko(api_config, import_config, arg, msg):
     }),
 ])
 def test_validate_configuration_ko(arg):
-    with pytest.raises(ValidationError) as err:
+    with pytest.raises(SystemExit) as err:
         validate_configuration(arg)
+    assert 4 == err.value.code
+
