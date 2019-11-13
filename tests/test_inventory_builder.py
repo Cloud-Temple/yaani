@@ -685,48 +685,156 @@ def test_execute_group_by_ok(inv_builder, args, expected):
 
 
 @pytest.mark.parametrize(
-    "element_name, inventory, host_vars, namespace, expected",
+    "args, expected",
     [
         (
-            "item1",
-            {"_meta": {"hostvars": {}}},
-            [{'b1': 'b#.b2'}],
-            {"build": {"b1": "bv1", "b2": "bv2"}, "import": {}},
-            {'_meta': {'hostvars': {'item1': {'b1': 'bv2', 'b2': 'bv2'}}}},
+            {
+                "element_name": "item1",
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {}
+                    }
+                },
+                "host_vars": [
+                    {
+                        'b1': 'i#.b2'
+                    }
+                ],
+                "namespace": {
+                    "build": {},
+                    "import": {
+                        "b1": "bv1",
+                        "b2": "bv2"
+                    },
+                }
+            },
+            {
+                '_meta': {
+                    'hostvars': {
+                        'item1': {
+                            'b1': 'bv2',
+                            # 'b2': 'bv2'
+                        }
+                    }
+                }
+            }
         ),
         (
-            "item2",
-            {"_meta": {"hostvars": {}}},
-            [{'b1': 'b#.b2'}],
-            {"build": {"b1": "bv1", "b2": "bv2"}, "import": {}},
-            {'_meta': {'hostvars': {'item2': {'b1': 'bv2', 'b2': 'bv2'}}}},
+            {
+                "element_name": "item2",
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {}
+                    }
+                },
+                "host_vars": [
+                    {
+                        'b1': 'i#.b2'
+                    }
+                ],
+                "namespace": {
+                    "build": {},
+                    "import": {
+                        "b1": "bv1",
+                        "b2": "bv2"
+                    },
+                },
+            },
+            {
+                '_meta': {
+                    'hostvars': {
+                        'item2': {
+                            'b1': 'bv2',
+                        }
+                    }
+                }
+            }
         ),
         (
-            "item3",
-            {"_meta": {"hostvars": {'item0': {'b0': 'bv0'}}}},
-            [{'b2': 'b#.b1'}],
-            {"build": {"b1": "bv1", "b2": "bv2"}, "import": {}},
-            {'_meta': {'hostvars': {'item0': {'b0': 'bv0'},
-                                    'item3': {'b1': 'bv1', 'b2': 'bv1'}}}},
+            {
+                "element_name": "item3",
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {
+                            'item0': {
+                                'b0': 'bv0'
+                            }
+                        }
+                    }
+                },
+                "host_vars": [
+                    {
+                        'b2': 'i#.b1'
+                    }
+                ],
+                "namespace": {
+                    "build": {},
+                    "import": {
+                        "b1": "bv1",
+                        "b2": "bv2"
+                    },
+                },
+            },
+            {
+                '_meta': {
+                    'hostvars': {
+                        'item0': {
+                            'b0': 'bv0'
+                        },
+                        'item3': {
+                            'b2': 'bv1'
+                        }
+                    }
+                }
+            }
         ),
         (
-            "item4",
-            {"_meta": {"hostvars": {'item0': {'b0': 'bv0'}}}},
-            [{'b2': 'b#.b1'}],
-            {"build": {"b1": "bv1", "b2": "bv2"}, "import": {}},
-            {'_meta': {'hostvars': {'item0': {'b0': 'bv0'},
-                                    'item4': {'b1': 'bv1', 'b2': 'bv1'}}}},
+            {
+                "element_name": "item4",
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {
+                            'item0': {
+                                'b0': 'bv0'
+                            }
+                        }
+                    }
+                },
+                "host_vars": [
+                    {
+                        'b2': 'i#.b1'
+                    }
+                ],
+                "namespace": {
+                    "build": {},
+                    "import": {
+                        "b1": "bv1",
+                        "b2": "bv2"
+                    },
+                },
+            },
+            {
+                '_meta': {
+                    'hostvars': {
+                        'item0': {
+                            'b0': 'bv0'
+                        },
+                        'item4': {
+                            'b2': 'bv1'
+                        }
+                    }
+                }
+            }
         ),
     ])
-def test_load_element_vars_ok(element_name, inventory, host_vars,
-                              namespace, expected, inv_builder):
+def test_load_element_vars_ok(args, expected, inv_builder):
     inv_builder._load_element_vars(
-        element_name=element_name,
-        inventory=inventory,
-        host_vars=host_vars,
-        namespaces=namespace
+        element_name=args["element_name"],
+        inventory=args["inventory"],
+        host_vars=args["host_vars"],
+        namespaces=args["namespace"]
     )
-    assert inventory == expected
+    assert args["inventory"] == expected
 
 
 @pytest.mark.parametrize(
