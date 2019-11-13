@@ -713,7 +713,6 @@ def test_execute_group_by_ok(inv_builder, args, expected):
                     'hostvars': {
                         'item1': {
                             'b1': 'bv2',
-                            # 'b2': 'bv2'
                         }
                     }
                 }
@@ -838,21 +837,32 @@ def test_load_element_vars_ok(args, expected, inv_builder):
 
 
 @pytest.mark.parametrize(
-    "application,import_type,inventory,get_element_list,expected",
+    "args,expected",
     [
         (
-            "dcim",
-            "racks",
-            {"_meta": {"hostvars": {}}},
-            [
-                dict(id=1, name="item1"),
-                dict(id=2, name="item2")
-            ],
+            {
+                "application": "dcim",
+                "import_type": "racks",
+                "import_options": {},
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {}
+                    }
+                },
+                "get_element_list": [
+                    {
+                        "id": 1, "name": "item1"
+                    },
+                    {
+                        "id": 2, "name": "item2"
+                    }
+                ],
+            },
             {
                 '_meta': {
                     'hostvars': {}
                 },
-                'devices': {
+                'racks': {
                     'hosts': [
                         'item1',
                         'item2'
@@ -867,14 +877,27 @@ def test_load_element_vars_ok(args, expected, inv_builder):
             }
         ),
         (
-            "virtualization",
-            "racks",
-            {"_meta": {"hostvars": {}}},
-            [
-                dict(id=1, name="item1"),
-                dict(id=2, name="item2"),
-                dict(id=3, name="item3")
-            ],
+            {
+                "application": "dcim",
+                "import_type": "racks",
+                "import_options": {},
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {}
+                    }
+                },
+                "get_element_list": [
+                    {
+                        "id": 1, "name": "item1"
+                    },
+                    {
+                        "id": 2, "name": "item2"
+                    },
+                    {
+                        "id": 3, "name": "item3"
+                    }
+                ],
+            },
             {
                 '_meta': {
                     'hostvars': {}
@@ -896,14 +919,27 @@ def test_load_element_vars_ok(args, expected, inv_builder):
             }
         ),
         (
-            "virtualization",
-            "racks",
-            {"_meta": {"hostvars": {}}},
-            [
-                dict(id=1, name="item1"),
-                dict(id=2, name=""),
-                dict(id=3, name=None)
-            ],
+            {
+                "application": "dcim",
+                "import_type": "racks",
+                "import_options": {},
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {}
+                    }
+                },
+                "get_element_list": [
+                    {
+                        "id": 1, "name": "item1"
+                    },
+                    {
+                        "id": 2, "name": ""
+                    },
+                    {
+                        "id": 3, "name": None
+                    }
+                ],
+            },
             {
                 '_meta': {
                     'hostvars': {}
@@ -911,38 +947,43 @@ def test_load_element_vars_ok(args, expected, inv_builder):
                 'racks': {
                     'hosts': [
                         'item1',
-                        '',
-                        None
+                        'racks_2',
+                        'racks_3',
                     ]
                 },
                 'all': {
                     'hosts': [
                         'item1',
-                        '',
-                        None
+                        'racks_2',
+                        'racks_3',
                     ]
                 }
             }
         ),
     ]
 )
-def test_execute_import_ok(inv_builder, application, inventory,
-                           import_type, get_element_list, expected, mocker):
-    import_options = inv_builder._import_section.get(application, {})\
-        .get(import_type, {})
+def test_execute_import_ok(inv_builder, args, expected, mocker):
+    import_options = (
+        inv_builder
+        ._import_section
+        .get(args["application"], {})
+        .get(args["import_type"], {})
+    )
 
     mocker.patch.object(
         InventoryBuilder,
         "_get_elements_list",
-        return_value=get_element_list
+        return_value=args["get_element_list"]
     )
 
-    assert inv_builder._execute_import(
-        application=application,
-        import_type=import_type,
-        import_options=import_options,
-        inventory=inventory
-    ) is None
+    inv_builder._execute_import(
+        application=args["application"],
+        import_type=args["import_type"],
+        import_options=args["import_options"],
+        inventory=args["inventory"]
+    )
+
+    assert args["inventory"] == expected
 
 
 @pytest.mark.parametrize(
