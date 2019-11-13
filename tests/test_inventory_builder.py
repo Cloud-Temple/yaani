@@ -987,37 +987,76 @@ def test_execute_import_ok(inv_builder, args, expected, mocker):
 
 
 @pytest.mark.parametrize(
-    "application, import_type, replacevalue, expected",
+    "args",
     [
-        (
-            "dcim",
-            "devices",
-            [],
-            []
-        ),
+        ({
+            "application": "dcim",
+            "import_options": "",
+            "host": "",
+            "import_type": "devices",
+            "replacevalue": [
+                {
+                    "name": "item1",
+                    ""
+                }
+            ],
+            "expected": []
+        }),
+        ({
+            "application": "dcim",
+            "import_options": "",
+            "host": "",
+            "import_type": "devices",
+            "replacevalue": [],
+            "expected": []
+        }),
+        ({
+            "application": "dcim",
+            "import_options": "",
+            "host": "",
+            "import_type": "devices",
+            "replacevalue": [],
+            "expected": []
+        }),
+        ({
+            "application": "dcim",
+            "import_options": "",
+            "host": "",
+            "import_type": "devices",
+            "replacevalue": [],
+            "expected": []
+        }),
+        ({
+            "application": "dcim",
+            "import_options": "",
+            "host": "",
+            "import_type": "devices",
+            "replacevalue": [],
+            "expected": []
+        }),
     ]
 )
-def test_get_elements_list_ok(inv_builder, application, import_type, replacevalue, expected, mocker):
+def test_get_elements_list_ok(inv_builder, args, mocker):
     mocker.patch.object(
         Endpoint,
         "filter",
-        return_value=replacevalue
+        return_value=args["replacevalue"]
     )
     mocker.patch.object(
         Endpoint,
         "all",
-        return_value=replacevalue
+        return_value=args["replacevalue"]
     )
     mocker.patch.object(
         Endpoint,
         "get",
-        return_value=replacevalue
+        return_value=args["replacevalue"]
     )
 
     returnvalue = inv_builder._get_elements_list(
-        application=application,
-        object_type=import_type,
-        import_options=inv_builder._import_section,
-        specific_host=inv_builder._host
+        application=args["application"],
+        object_type=args["import_type"],
+        import_options=args["import_options"],
+        specific_host=args["host"]
     )
-    assert returnvalue == expected
+    assert returnvalue == args["expected"]
