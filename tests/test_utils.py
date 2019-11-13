@@ -120,7 +120,7 @@ def test_jqexpression_ok(test_data, arg, first, exp):
 @pytest.mark.parametrize("arg", [
     ("Bad expr"),
 ])
-def test_jqexpression_ok(test_data, arg):
+def test_jqexpression_ko(test_data, arg):
     """Test expression resolution through pyjq"""
     with pytest.raises(SystemExit) as err:
         resolve_expression(arg, test_data, False)
