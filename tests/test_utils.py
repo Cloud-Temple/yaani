@@ -277,300 +277,300 @@ def test_validate_api_ko(arg):
 
 
 @pytest.mark.parametrize("arg", [
-        ({  # containing devices with filters
-            "netbox": {
-                "import": {
-                    "dcim": {
-                        "devices": {
-                            "filters": [  # Several filters
-                                {"role_id": 3},
-                                {"site_id": 4}
-                            ],
-                        },
-                    }
-                }
-            }
-        }),
-        ({  # containing devices with group_by
-            "netbox": {
-                "import": {
-                    "dcim": {
-                        "devices": {
-                            "group_by": [
-                                ".device_role",
-                                ".tags"
-                            ],
-                        },
-                    }
-                }
-            }
-        }),
-        ({  # containing devices with group prefix
-            "netbox": {
-                "import": {
-                    "dcim": {
-                        "devices": {
-                            "group_prefix": "dev_"
-                        }
-                    }
-                }
-            }
-        }),
-        ({  # containing devices with host_vars
-            "netbox": {
-                "import": {
-                    "dcim": {
-                        "devices": {
-                            "host_vars": [
-                                {"ip": "ip"}
-                            ]
-                        },
-                    }
-                }
-            }
-        }),
-        ({  # containing devices with sub-imports
-            "netbox": {
-                "api": {
-                    "url": "http://test.com"
-                },
-                "import": {
-                    "dcim": {
-                        "devices": {
-                            "sub_import": [
-                                {
-                                    "stack": "a.b",
-                                    "vars": [
-                                        {
-                                            "a": {
-                                                "application": "whatever",
-                                                "type": "whatever",
-                                                "index": "whatever",
-                                                "filter": {
-                                                    "device_id": ".id",
-                                                }
-                                            }
-                                        },
-                                        {
-                                            "b": {
-                                                "application": "whatever",
-                                                "type": "whatever",
-                                                "index": "whatever",
-                                                "filter": {
-                                                    "device_id": ".id",
-                                                }
-                                            }
-                                        }
-                                    ]
-                                }
-                            ]
-                        },
-                    }
-                }
-            }
-        }),
-        ({  # containing devices with all
-            "netbox": {
-                "api": {
-                    "url": "http://test.com"
-                },
-                "import": {
-                    "dcim": {
-                        "devices": {
-                            "filters": [
-                                {"role_id": 3}
-                            ],
-                            "group_by": [
-                                "device_role"
-                            ],
-                            "group_prefix": "dev_",
-                            "host_vars": [
-                                {"ip": "ip"}
-                            ],
-                            "sub_import": [
-                                {
-                                    "stack": "a.b",
-                                    "vars": [
-                                        {
-                                            "a": {
-                                                "application": "whatever",
-                                                "type": "whatever",
-                                                "index": "whatever",
-                                                "filter": {
-                                                    "device_id": ".id",
-                                                }
-                                            }
-                                        },
-                                        {
-                                            "b": {
-                                                "application": "whatever",
-                                                "type": "whatever",
-                                                "index": "whatever",
-                                                "filter": {
-                                                    "device_id": ".id",
-                                                }
-                                            }
-                                        }
-                                    ]
-                                }
-                            ]
-                        },
-                    }
-                }
-            }
-        }),
-        ({  # containing devices with host_vars and racks with group_by
-            "netbox": {
-                "api": {
-                    "url": "http://test.com"
-                },
-                "import": {
-                    "dcim": {
-                        "devices": {
-                            "host_vars": [
-                                {"ip": "ip"}
-                            ]
-                        },
-                        "racks": {
-                            "group_by": [
-                                "device_role"
-                            ],
-                        },
-                    }
-                }
-            }
-        }),
-        ({  # containing devices with filters
-            "netbox": {
-                "api": {
-                    "url": "http://test.com"
-                },
-                "import": {
-                    "dcim": {
-                        "devices": {
-                            "filters": [
-                                {"role_id": 3}
-                            ],
-                        },
-                    }
-                }
-            }
-        }),
-        ({  # containing devices with group_by
-            "netbox": {
-                "api": {
-                    "url": "http://test.com"
-                },
-                "import": {
-                    "dcim": {
-                        "devices": {
-                            "group_by": [
-                                "device_role",
-                                "tags"
-                            ],
-                        },
-                    }
-                }
-            }
-        }),
-        ({  # containing devices with devices
-            "netbox": {
-                "api": {
-                    "url": "http://test.com"
-                },
-                "import": {
-                    "dcim": {
-                        "devices": {
-                            "group_prefix": "dev_",
-                        },
-                    }
-                }
-            }
-        }),
-        ({  # containing devices with host_vars
-            "netbox": {
-                "api": {
-                    "url": "http://test.com"
-                },
-                "import": {
-                    "dcim": {
-                        "devices": {
-                            "host_vars": [
-                                {"ip": "ip"}
-                            ]
-                        },
-                    }
-                }
-            }
-        }),
-        ({  # containing devices with all
-            "netbox": {
-                "api": {
-                    "url": "http://test.com"
-                },
-                "import": {
-                    "dcim": {
-                        "devices": {
-                            "filters": [
-                                {"role_id": 3}
-                            ],
-                            "group_by": [
-                                "device_role"
-                            ],
-                            "group_prefix": "dev_",
-                            "host_vars": [
-                                {"ip": "ip"}
-                            ],
-                        },
-                    }
-                }
-            }
-        }),
-        ({  # containing devices with host_vars and racks with group_by
-            "netbox": {
-                "api": {
-                    "url": "http://test.com"
-                },
-                "import": {
-                    "dcim": {
-                        "devices": {
-                            "host_vars": [
-                                {"ip": "ip"}
-                            ]
-                        },
-                        "racks": {
-                            "group_by": [
-                                "device_role"
-                            ],
-                        },
-                    }
-                }
-            }
-        }),
-        ({  # containing dcim with devices and virtualization with racks
-            "netbox": {
-                "api": {
-                    "url": "http://test.com"
-                },
-                "import": {
-                    "dcim": {
-                        "devices": {
-                            "host_vars": [
-                                {"ip": "ip"}
-                            ]
-                        },
+    ({  # containing devices with filters
+        "netbox": {
+            "import": {
+                "dcim": {
+                    "devices": {
+                        "filters": [  # Several filters
+                            {"role_id": 3},
+                            {"site_id": 4}
+                        ],
                     },
-                    "virtualization": {
-                        "racks": {
-                            "group_by": [
-                                "device_role"
-                            ],
-                        },
+                }
+            }
+        }
+    }),
+    ({  # containing devices with group_by
+        "netbox": {
+            "import": {
+                "dcim": {
+                    "devices": {
+                        "group_by": [
+                            ".device_role",
+                            ".tags"
+                        ],
+                    },
+                }
+            }
+        }
+    }),
+    ({  # containing devices with group prefix
+        "netbox": {
+            "import": {
+                "dcim": {
+                    "devices": {
+                        "group_prefix": "dev_"
                     }
                 }
             }
-        }),
-    ])
+        }
+    }),
+    ({  # containing devices with host_vars
+        "netbox": {
+            "import": {
+                "dcim": {
+                    "devices": {
+                        "host_vars": [
+                            {"ip": "ip"}
+                        ]
+                    },
+                }
+            }
+        }
+    }),
+    ({  # containing devices with sub-imports
+        "netbox": {
+            "api": {
+                "url": "http://test.com"
+            },
+            "import": {
+                "dcim": {
+                    "devices": {
+                        "sub_import": [
+                            {
+                                "stack": "a.b",
+                                "vars": [
+                                    {
+                                        "a": {
+                                            "application": "whatever",
+                                            "type": "whatever",
+                                            "index": "whatever",
+                                            "filter": {
+                                                "device_id": ".id",
+                                            }
+                                        }
+                                    },
+                                    {
+                                        "b": {
+                                            "application": "whatever",
+                                            "type": "whatever",
+                                            "index": "whatever",
+                                            "filter": {
+                                                "device_id": ".id",
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                }
+            }
+        }
+    }),
+    ({  # containing devices with all
+        "netbox": {
+            "api": {
+                "url": "http://test.com"
+            },
+            "import": {
+                "dcim": {
+                    "devices": {
+                        "filters": [
+                            {"role_id": 3}
+                        ],
+                        "group_by": [
+                            "device_role"
+                        ],
+                        "group_prefix": "dev_",
+                        "host_vars": [
+                            {"ip": "ip"}
+                        ],
+                        "sub_import": [
+                            {
+                                "stack": "a.b",
+                                "vars": [
+                                    {
+                                        "a": {
+                                            "application": "whatever",
+                                            "type": "whatever",
+                                            "index": "whatever",
+                                            "filter": {
+                                                "device_id": ".id",
+                                            }
+                                        }
+                                    },
+                                    {
+                                        "b": {
+                                            "application": "whatever",
+                                            "type": "whatever",
+                                            "index": "whatever",
+                                            "filter": {
+                                                "device_id": ".id",
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                }
+            }
+        }
+    }),
+    ({  # containing devices with host_vars and racks with group_by
+        "netbox": {
+            "api": {
+                "url": "http://test.com"
+            },
+            "import": {
+                "dcim": {
+                    "devices": {
+                        "host_vars": [
+                            {"ip": "ip"}
+                        ]
+                    },
+                    "racks": {
+                        "group_by": [
+                            "device_role"
+                        ],
+                    },
+                }
+            }
+        }
+    }),
+    ({  # containing devices with filters
+        "netbox": {
+            "api": {
+                "url": "http://test.com"
+            },
+            "import": {
+                "dcim": {
+                    "devices": {
+                        "filters": [
+                            {"role_id": 3}
+                        ],
+                    },
+                }
+            }
+        }
+    }),
+    ({  # containing devices with group_by
+        "netbox": {
+            "api": {
+                "url": "http://test.com"
+            },
+            "import": {
+                "dcim": {
+                    "devices": {
+                        "group_by": [
+                            "device_role",
+                            "tags"
+                        ],
+                    },
+                }
+            }
+        }
+    }),
+    ({  # containing devices with devices
+        "netbox": {
+            "api": {
+                "url": "http://test.com"
+            },
+            "import": {
+                "dcim": {
+                    "devices": {
+                        "group_prefix": "dev_",
+                    },
+                }
+            }
+        }
+    }),
+    ({  # containing devices with host_vars
+        "netbox": {
+            "api": {
+                "url": "http://test.com"
+            },
+            "import": {
+                "dcim": {
+                    "devices": {
+                        "host_vars": [
+                            {"ip": "ip"}
+                        ]
+                    },
+                }
+            }
+        }
+    }),
+    ({  # containing devices with all
+        "netbox": {
+            "api": {
+                "url": "http://test.com"
+            },
+            "import": {
+                "dcim": {
+                    "devices": {
+                        "filters": [
+                            {"role_id": 3}
+                        ],
+                        "group_by": [
+                            "device_role"
+                        ],
+                        "group_prefix": "dev_",
+                        "host_vars": [
+                            {"ip": "ip"}
+                        ],
+                    },
+                }
+            }
+        }
+    }),
+    ({  # containing devices with host_vars and racks with group_by
+        "netbox": {
+            "api": {
+                "url": "http://test.com"
+            },
+            "import": {
+                "dcim": {
+                    "devices": {
+                        "host_vars": [
+                            {"ip": "ip"}
+                        ]
+                    },
+                    "racks": {
+                        "group_by": [
+                            "device_role"
+                        ],
+                    },
+                }
+            }
+        }
+    }),
+    ({  # containing dcim with devices and virtualization with racks
+        "netbox": {
+            "api": {
+                "url": "http://test.com"
+            },
+            "import": {
+                "dcim": {
+                    "devices": {
+                        "host_vars": [
+                            {"ip": "ip"}
+                        ]
+                    },
+                },
+                "virtualization": {
+                    "racks": {
+                        "group_by": [
+                            "device_role"
+                        ],
+                    },
+                }
+            }
+        }
+    }),
+])
 def test_validate_import_ok(api_config, arg):
     # full api section with import section
     arg["netbox"]["api"] = api_config

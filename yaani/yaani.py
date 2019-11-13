@@ -927,5 +927,6 @@ def cli(cli_argv):
         inventory
     )
 
+
 if __name__ == '__main__':
     cli(sys.argv)

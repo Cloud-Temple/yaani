@@ -100,8 +100,8 @@ def config():
 @pytest.fixture
 def device_import_option():
     return InventoryBuilder(
-            cli_args, config
-        ).imports.get('dcim', {}).get('devices', {})
+        cli_args, config
+    ).imports.get('dcim', {}).get('devices', {})
 
 
 @pytest.fixture
