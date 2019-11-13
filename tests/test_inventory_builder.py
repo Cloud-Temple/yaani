@@ -1078,7 +1078,8 @@ def test_execute_import_ok(inv_builder, args, expected, mocker):
             "import_options": {
                 "filters": [
                     {
-                        "site_id": 1
+                        "site_id": 1,
+                        "group": 1
                     }
                 ]
             },
@@ -1089,7 +1090,14 @@ def test_execute_import_ok(inv_builder, args, expected, mocker):
                     {
                         "name": "item1",
                         "id": 1,
-                        "site_id": 1
+                        "site_id": 1,
+                        "group": 1
+                    },
+                    {
+                        "name": "item2",
+                        "id": 2,
+                        "site_id": 2,
+                        "group": 1
                     }
                 ],
                 "get": [
@@ -1098,11 +1106,15 @@ def test_execute_import_ok(inv_builder, args, expected, mocker):
                 "all": [
                     {
                         "name": "item1",
-                        "id": 1
+                        "id": 1,
+                        "site_id": 1,
+                        "group": 1
                     },
                     {
                         "name": "item2",
-                        "id": 2
+                        "id": 2,
+                        "site_id": 2,
+                        "group": 1
                     }
                 ],
             },
@@ -1110,87 +1122,16 @@ def test_execute_import_ok(inv_builder, args, expected, mocker):
                 {
                     "name": "item1",
                     "id": 1,
-                    "site_id": 1
+                    "site_id": 1,
+                    "group": 1
+                },
+                {
+                    "name": "item2",
+                    "id": 2,
+                    "site_id": 2,
+                    "group": 1
                 }
             ]
-        }),
-        ({
-            "application": "dcim",
-            "import_options": {},
-            "host": "",
-            "import_type": "devices",
-            "replacevalue": {
-                "filter": [
-                    {
-                        "name": "item1",
-                        "id": 1
-                    },
-                    {
-                        "name": "item2",
-                        "id": 2
-                    }
-                ],
-                "get": [
-                    {
-                        "name": "item1",
-                        "id": 1
-                    },
-                    {
-                        "name": "item2",
-                        "id": 2
-                    }
-                ],
-                "all": [
-                    {
-                        "name": "item1",
-                        "id": 1
-                    },
-                    {
-                        "name": "item2",
-                        "id": 2
-                    }
-                ],
-            },
-            "expected": []
-        }),
-        ({
-            "application": "dcim",
-            "import_options": {},
-            "host": "",
-            "import_type": "devices",
-            "replacevalue": {
-                "filter": [
-                    {
-                        "name": "item1",
-                        "id": 1
-                    },
-                    {
-                        "name": "item2",
-                        "id": 2
-                    }
-                ],
-                "get": [
-                    {
-                        "name": "item1",
-                        "id": 1
-                    },
-                    {
-                        "name": "item2",
-                        "id": 2
-                    }
-                ],
-                "all": [
-                    {
-                        "name": "item1",
-                        "id": 1
-                    },
-                    {
-                        "name": "item2",
-                        "id": 2
-                    }
-                ],
-            },
-            "expected": []
         }),
     ]
 )
