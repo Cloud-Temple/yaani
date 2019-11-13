@@ -991,47 +991,205 @@ def test_execute_import_ok(inv_builder, args, expected, mocker):
     [
         ({
             "application": "dcim",
-            "import_options": "",
-            "host": "",
+            "import_options": {},
+            "host": "item1",
             "import_type": "devices",
-            "replacevalue": [
+            "replacevalue": {
+                "filter": [
+                    {
+                        "name": "item1",
+                        "id": 1
+                    },
+                ],
+                "get": [
+                    {
+                        "name": "item1",
+                        "id": 1
+                    },
+                ],
+                "all": [
+                    {
+                        "name": "item1",
+                        "id": 1
+                    },
+                    {
+                        "name": "item2",
+                        "id": 2
+                    }
+                ],
+            },
+            "expected": [
                 {
                     "name": "item1",
-                    ""
+                    "id": 1
                 }
-            ],
+            ]
+        }),
+        ({
+            "application": "dcim",
+            "import_options": {},
+            "host": "",
+            "import_type": "devices",
+            "replacevalue": {
+                "filter": [
+                    {
+                        "name": "item1",
+                        "id": 1
+                    },
+                    {
+                        "name": "item2",
+                        "id": 2
+                    }
+                ],
+                "get": [
+                    {
+                        "name": "item1",
+                        "id": 1
+                    },
+                    {
+                        "name": "item2",
+                        "id": 2
+                    }
+                ],
+                "all": [
+                    {
+                        "name": "item1",
+                        "id": 1
+                    },
+                    {
+                        "name": "item2",
+                        "id": 2
+                    }
+                ],
+            },
+            "expected": [
+                {
+                    "name": "item1",
+                    "id": 1,
+                },
+                {
+                    "name": "item2",
+                    "id": 2,
+                }
+            ]
+        }),
+        ({
+            "application": "dcim",
+            "import_options": {
+                "filters": [
+                    {
+                        "site_id": 1
+                    }
+                ]
+            },
+            "host": "",
+            "import_type": "devices",
+            "replacevalue": {
+                "filter": [
+                    {
+                        "name": "item1",
+                        "id": 1,
+                        "site_id": 1
+                    }
+                ],
+                "get": [
+                    "should not be called"
+                ],
+                "all": [
+                    {
+                        "name": "item1",
+                        "id": 1
+                    },
+                    {
+                        "name": "item2",
+                        "id": 2
+                    }
+                ],
+            },
+            "expected": [
+                {
+                    "name": "item1",
+                    "id": 1,
+                    "site_id": 1
+                }
+            ]
+        }),
+        ({
+            "application": "dcim",
+            "import_options": {},
+            "host": "",
+            "import_type": "devices",
+            "replacevalue": {
+                "filter": [
+                    {
+                        "name": "item1",
+                        "id": 1
+                    },
+                    {
+                        "name": "item2",
+                        "id": 2
+                    }
+                ],
+                "get": [
+                    {
+                        "name": "item1",
+                        "id": 1
+                    },
+                    {
+                        "name": "item2",
+                        "id": 2
+                    }
+                ],
+                "all": [
+                    {
+                        "name": "item1",
+                        "id": 1
+                    },
+                    {
+                        "name": "item2",
+                        "id": 2
+                    }
+                ],
+            },
             "expected": []
         }),
         ({
             "application": "dcim",
-            "import_options": "",
+            "import_options": {},
             "host": "",
             "import_type": "devices",
-            "replacevalue": [],
-            "expected": []
-        }),
-        ({
-            "application": "dcim",
-            "import_options": "",
-            "host": "",
-            "import_type": "devices",
-            "replacevalue": [],
-            "expected": []
-        }),
-        ({
-            "application": "dcim",
-            "import_options": "",
-            "host": "",
-            "import_type": "devices",
-            "replacevalue": [],
-            "expected": []
-        }),
-        ({
-            "application": "dcim",
-            "import_options": "",
-            "host": "",
-            "import_type": "devices",
-            "replacevalue": [],
+            "replacevalue": {
+                "filter": [
+                    {
+                        "name": "item1",
+                        "id": 1
+                    },
+                    {
+                        "name": "item2",
+                        "id": 2
+                    }
+                ],
+                "get": [
+                    {
+                        "name": "item1",
+                        "id": 1
+                    },
+                    {
+                        "name": "item2",
+                        "id": 2
+                    }
+                ],
+                "all": [
+                    {
+                        "name": "item1",
+                        "id": 1
+                    },
+                    {
+                        "name": "item2",
+                        "id": 2
+                    }
+                ],
+            },
             "expected": []
         }),
     ]
@@ -1040,17 +1198,17 @@ def test_get_elements_list_ok(inv_builder, args, mocker):
     mocker.patch.object(
         Endpoint,
         "filter",
-        return_value=args["replacevalue"]
+        return_value=args["replacevalue"]["filter"]
     )
     mocker.patch.object(
         Endpoint,
         "all",
-        return_value=args["replacevalue"]
+        return_value=args["replacevalue"]["all"]
     )
     mocker.patch.object(
         Endpoint,
         "get",
-        return_value=args["replacevalue"]
+        return_value=args["replacevalue"]["get"]
     )
 
     returnvalue = inv_builder._get_elements_list(
