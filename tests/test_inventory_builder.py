@@ -492,66 +492,196 @@ def test_add_element_to_group_ok(inv_builder, element_name,
 
 
 @pytest.mark.parametrize(
-    "element_name, inventory, namespace, group_by, "
-    "group_prefix, expected",
+    "args,expected",
     [
         (
-            "item1",
-            {"_meta": {"hostvars": {}}},
-            {"import": {"i1": "iv1", "i2": "iv2"}},
-            {'.i1', '.i2'},
-            "dev_",
-            {'_meta': {'hostvars': {}},
-             'dev_iv2': {'hosts': ['item1']},
-             'dev_iv1': {'hosts': ['item1']}},
+            {
+                "element_name": "item1",
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {}
+                    }
+                },
+                "namespace": {
+                    "import": {
+                        "i1": "iv1",
+                        "i2": "iv2"
+                    }
+                },
+                "group_by": {
+                    '.i1', '.i2'
+                },
+                "group_prefix": "dev_",
+            },
+            {
+                '_meta': {
+                    'hostvars': {}
+                },
+                'dev_iv2': {
+                    'hosts': [
+                        'item1'
+                    ]
+                },
+                'dev_iv1': {
+                    'hosts': [
+                        'item1'
+                    ]
+                }
+            },
         ),
         (
-            "item2",
-            {"_meta": {"hostvars": {}}},
-            {"import": {"i2": "iv2", "i3": "iv3"}},
-            {'.i3'},
-            "",
-            {'_meta': {'hostvars': {}},
-             'iv3': {'hosts': ['item2']}},
+            {
+                "element_name": "item2",
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {}
+                    }
+                },
+                "namespace": {
+                    "import": {
+                        "i2": "iv2",
+                        "i3": "iv3"
+                    }
+                },
+                "group_by": {
+                    '.i3'
+                },
+                "group_prefix": ""
+            },
+            {
+                '_meta': {
+                    'hostvars': {}
+                },
+                'iv3': {
+                    'hosts': [
+                        'item2'
+                    ]
+                }
+            }
         ),
         (
-            "item3",
-            {"_meta": {"hostvars": {'item0': {'b0': 'bv0'}}}},
-            {"import": {"i1": "iv1", "i2": 0, "i3": "iv3"}},
-            {'.i2'},
-            "",
-            {'_meta': {'hostvars': {'item0': {'b0': 'bv0'}}},
-             '0': {'hosts': ['item3']}},
+            {
+                "element_name": "item3",
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {
+                            'item0': {
+                                'b0': 'bv0'
+                            }
+                        }
+                    }
+                },
+                "namespace": {
+                    "import": {
+                        "i1": "iv1",
+                        "i2": 0,
+                        "i3": "iv3"
+                    }
+                },
+                "group_by": {
+                    '.i2'
+                },
+                "group_prefix": ""
+            },
+            {
+                '_meta': {
+                    'hostvars': {
+                        'item0': {
+                            'b0': 'bv0'
+                        }
+                    }
+                },
+                '0': {
+                    'hosts': [
+                        'item3'
+                    ]
+                }
+            }
         ),
         (
-            "item4",
-            {"_meta": {"hostvars": {'item0': {'b0': 'bv0'}}}},
-            {"import": {"i1": "iv1", "i2": None, "i3": "iv3"}},
-            {'.i2'},
-            "",
-            {'_meta': {'hostvars': {'item0': {'b0': 'bv0'}}}},
+            {
+                "element_name": "item4",
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {
+                            'item0': {
+                                'b0': 'bv0'
+                            }
+                        }
+                    }
+                },
+                "namespace": {
+                    "import": {
+                        "i1": "iv1",
+                        "i2": None,
+                        "i3": "iv3"
+                    }
+                },
+                "group_by": {
+                    '.i2'
+                },
+                "group_prefix": ""
+            },
+            {
+                '_meta': {
+                    'hostvars': {
+                        'item0': {
+                            'b0': 'bv0'
+                        }
+                    }
+                }
+            }
         ),
         (
-            "item5",
-            {"_meta": {"hostvars": {'item0': {'b0': 'bv0'}}}},
-            {"import": {"i1": "iv1", "i2": "", "i3": "iv3"}},
-            {'.i2'},
-            "test_",
-            {'_meta': {'hostvars': {'item0': {'b0': 'bv0'}}},
-                'test_': {'hosts': ['item5']}},
-        ),
+            {
+                "element_name": "item5",
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {
+                            'item0': {
+                                'b0': 'bv0'
+                            }
+                        }
+                    }
+                },
+                "namespace": {
+                    "import": {
+                        "i1": "iv1",
+                        "i2": "",
+                        "i3": "iv3"
+                    }
+                },
+                "group_by": {
+                    '.i2'
+                },
+                "group_prefix": "test_"
+            },
+            {
+                '_meta': {
+                    'hostvars': {
+                        'item0': {
+                            'b0': 'bv0'
+                        }
+                    }
+                },
+                'test_': {
+                    'hosts': [
+                        'item5'
+                    ]
+                }
+            }
+        )
     ]
 )
-def test_execute_group_by_ok(inv_builder, element_name, group_by,
-                             group_prefix, namespace, inventory, expected):
-    assert inv_builder._execute_group_by(
-        element_index=element_name,
-        group_by=group_by,
-        group_prefix=group_prefix,
-        inventory=inventory,
-        namespaces=namespace
-    ) is None
-    assert inventory == expected
+def test_execute_group_by_ok(inv_builder, args, expected):
+    inv_builder._execute_group_by(
+        element_index=args["element_name"],
+        group_by=args["group_by"],
+        group_prefix=args["group_prefix"],
+        inventory=args["inventory"],
+        namespaces=args["namespace"]
+    )
+    assert args["inventory"] == expected
 
 
 @pytest.mark.parametrize(
@@ -590,12 +720,12 @@ def test_execute_group_by_ok(inv_builder, element_name, group_by,
     ])
 def test_load_element_vars_ok(element_name, inventory, host_vars,
                               namespace, expected, inv_builder):
-    assert inv_builder._load_element_vars(
+    inv_builder._load_element_vars(
         element_name=element_name,
         inventory=inventory,
         host_vars=host_vars,
         namespaces=namespace
-    ) is None
+    )
     assert inventory == expected
 
 
