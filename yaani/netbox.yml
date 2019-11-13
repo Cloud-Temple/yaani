@@ -1,0 +1,135 @@
+# This yaml file is used as a configuration file for Yaani. It contains some
+# examples of configuration but the complex features are best explained in the
+# documention.
+# For more information, please visit the wiki:
+# https://github.com/Cloud-Temple/yaani/wiki/Home-Page
+netbox:
+  api:
+    # API section to specify api configuration
+    # All the following keys are directly provided to pynetbox for netbox api
+    # connection purposes.
+    # (see https://pynetbox.readthedocs.io/en/latest/index.html for more
+    # information)
+
+    # This key is mandatory
+    url: "http://netbox.example.lan/"
+
+    # The followings are optional
+    # token: "<Netbox token>"
+
+    # Private key and private key file are mutually exclusive parameters
+    # private_key: "<Your private key>"
+    # private_key_file: "<Your private key file>"
+
+    # ssl_verify: True
+
+  import:
+    # The 'import' section indicates which elements must be provided in the
+    # inventory, how to group them, and allows using filtering and variables
+    # loading features.
+    # The 'import' section is optional and must be used only if some
+    # grouping, filtering or var loading feature is needed.
+    # If present, this section must contain at least one section amongst the
+    # following : dcim, virtualization... (corresponding to netbox
+    # applications)
+    # 'dcim' for example is an application name from netbox where we can find
+    # devices, racks, interfaces etc.
+    dcim:
+      # The 'dcim' section, as any netbox application section, holds a key
+      # for each element that must be handled
+      devices:
+        # The 'device' section configures import from Netbox on device
+        # objects. This section is called an 'import statement' of type
+        # 'device'.
+        # All import statements, in whatever application, are structured the
+        # same way.
+        # A section like this must at least contain one element.
+
+        # The 'filters' value is passed when requesting Netbox via pynetbox.
+        # It allows to narrow what to fetch from Netbox and reduce useless
+        # compute time.
+        # This field is optional.
+        # In the example below, two calls to Netbox will be performed and
+        # and will respectively return:
+        #  - The devices that are tagged with the "tor" tag
+        #  - The devices that are tagged with the "pe" tag and that have
+        #    their site id set to 1.
+        filters:
+          - tag: tor
+          - tag: pe
+            site_id: 1
+
+        # The 'group_prefix' is an optional field. If the group_by statement
+        # is used, this will prefix every group name created for the current
+        # import statement with the given prefix. This is used to avoid
+        # colliding group names for different types of element.
+        # Example: With the following, every device group will be prefixed
+        # with the 'dev_' prefix.
+        group_prefix: 'dev_'
+
+        # The "sub_import" statement allows one to perform joins between
+        # elements in Netbox. See the wiki for more information.
+        # In the current example, the interfaces of every devices fetched
+        # from Netbox will be retrieved, as well as any IP associated to
+        # these interfaces.
+        # IMPORTANT: Please note that the use of the feature significantly
+        # increase execution time as it leads to perform a lot of calls to
+        # Netbox API.
+        sub_import:
+          - stack: interfaces.ip_addresses
+            vars:
+              - interfaces:
+                  application: dcim
+                  type: interfaces
+                  index: name
+                  filter:
+                    device_id: .id
+              - ip_addresses:
+                  application: ipam
+                  type: ip-addresses
+                  index: address
+                  filter:
+                    interface_id: .id
+
+        # The 'host_vars' field is optional. It configures which variable
+        # from Netbox must be loaded as hostvars in the inventory.
+        host_vars:
+          # The host_vars is structured as a list in order to maintain the
+          # order of variable declaration. Each element, is a one-key dict
+          # with a JQ query as its value.
+          # The variable shall be accessible in Ansible for each host under
+          # the name given by the key name.
+          # For example, every host shall have a 'role' variable containing
+          # the id of the device role.
+          - role: .device_role.id
+          - manufacturer: .device_type.manufacturer.id
+          - site: .site.id
+          - serial: .serial
+          - ip_without_cidr: .primary_ip.address // "" | sub("/[0-9]+"; "")
+          - ip_with_cidr: .primary_ip.address
+
+        # The 'group_by' field is an optional field. It expects a list and is
+        # used to configure the grouping feature.
+        # The expected values are JQ queries. Each one of them are later
+        # resolved and a group is created for every value.
+        # In the current example, a group is created for every site name, and
+        # for every role as it is declared in host-vars above.
+        # (see namespaces in the wiki)
+        group_by:
+          - b#.role
+          - .site.name
+
+  render:
+    # The render section is not compulsory. It allows a user to specify a
+    # custom module and to execute custom functions on the inventory dumping
+    # it. Functions are executed in the order in which they are referenced:
+    #   1 - custom_func1
+    #   2 - custom_func2
+    #   3 - custom_func3
+    - module: custom
+      name: custom_func1
+    - module: custom
+      name: custom_func2
+    - module: custom
+      name: custom_func3
+
