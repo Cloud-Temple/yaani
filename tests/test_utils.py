@@ -3,7 +3,8 @@ import pytest
 from yaani.yaani import (
     parse_cli_args,
     validate_configuration,
-    resolve_expression
+    resolve_expression,
+    error
 )
 from jsonschema import ValidationError
 import pytest
@@ -114,6 +115,16 @@ def test_data():
 def test_jqexpression_ok(test_data, arg, first, exp):
     """Test expression resolution through pyjq"""
     assert resolve_expression(arg, test_data, first) == exp
+
+
+@pytest.mark.parametrize("arg", [
+    ("Bad expr"),
+])
+def test_jqexpression_ko(test_data, arg):
+    """Test expression resolution through pyjq"""
+    with pytest.raises(SystemExit) as err:
+        resolve_expression(arg, test_data, False)
+    assert error.JQ_PROCESSING["code"] == err.value.code
 
 
 @pytest.mark.parametrize("args,exp", [
@@ -260,7 +271,9 @@ def test_validate_api_ko(arg):
     """Validate API configuration structure errors"""
     with pytest.raises(SystemExit) as err:
         validate_configuration(arg)
-    assert 4 == err.value.code
+    assert (
+        error.BAD_CONFIG_FILE_STRUCTURE["code"] == err.value.code
+    )
 
 
 @pytest.mark.parametrize("arg", [
@@ -763,7 +776,9 @@ def test_validate_import_ko(api_config, arg):
     arg["netbox"]["api"] = api_config
     with pytest.raises(SystemExit) as err:
         validate_configuration(arg)
-    assert 4 == err.value.code
+    assert (
+        error.BAD_CONFIG_FILE_STRUCTURE["code"] == err.value.code
+    )
 
 
 @pytest.mark.parametrize("arg", [
@@ -840,7 +855,9 @@ def test_validate_render_ko(api_config, import_config, arg):
     arg["netbox"]["import"] = import_config
     with pytest.raises(SystemExit) as err:
         validate_configuration(arg)
-    assert 4 == err.value.code
+    assert (
+        error.BAD_CONFIG_FILE_STRUCTURE["code"] == err.value.code
+    )
 
 
 @pytest.mark.parametrize("arg", [
@@ -1046,5 +1063,6 @@ def test_validate_render_ko(api_config, import_config, arg):
 def test_validate_configuration_ko(arg):
     with pytest.raises(SystemExit) as err:
         validate_configuration(arg)
-    assert 4 == err.value.code
-
+    assert (
+        error.BAD_CONFIG_FILE_STRUCTURE["code"] == err.value.code
+    )

@@ -2,7 +2,9 @@ import pytest
 from pynetbox.core.endpoint import Endpoint
 from yaani.yaani import (
     InventoryBuilder,
-    resolve_expression)
+    resolve_expression,
+    error
+)
 
 
 @pytest.fixture
@@ -108,6 +110,19 @@ def init_inventory():
 
 
 @pytest.fixture
+def test_data():
+    return {
+        "a": 1,
+        "b": 2,
+        "c": 3,
+        "d": None,
+        "e": {
+            "e_a": "test value"
+        }
+    }
+
+
+@pytest.fixture
 def inv_builder(cli_args, config):
     return InventoryBuilder(cli_args, config)
 
@@ -144,20 +159,7 @@ def test_get_identifier_ko(inv_builder, host, obj_type):
     """Test the get_identifier method raises an error when it should"""
     with pytest.raises(SystemExit) as err:
         inv_builder._get_identifier(host, obj_type)
-    assert 5 == err.value.code
-
-
-@pytest.fixture
-def test_data():
-    return {
-        "a": 1,
-        "b": 2,
-        "c": 3,
-        "d": None,
-        "e": {
-            "e_a": "test value"
-        }
-    }
+    assert error.CANNOT_COMPUTE_GEN_ID["code"] == err.value.code
 
 
 @pytest.mark.parametrize("key_path,expected", [
@@ -175,15 +177,25 @@ def test_data():
     ),
     (  # single item of import section in list
         "il#.i1",
-        ["iv1"]
+        [
+            "iv1"
+        ]
     ),
     (  # list items of import section
         "i#.i4",
-        ["a", "b", "c"]
+        [
+            "a",
+            "b",
+            "c"
+        ]
     ),
     (  # unfolded list of import section
         "il#.i4[]",
-        ["a", "b", "c"]
+        [
+            "a",
+            "b",
+            "c"
+        ]
     ),
     (  # unfolded list of import section first element
         "i#.i4[]",
@@ -198,10 +210,12 @@ def test_data():
     ),
     (  # dict of import section in a list
         "il#.i5",
-        [{
-            "ik1": "ikv1",
-            "ik2": "ikv2"
-        }]
+        [
+            {
+                "ik1": "ikv1",
+                "ik2": "ikv2"
+            }
+        ]
     ),
     (  # unfolded dict of import section as a list
         "il#.i5[]",
@@ -216,15 +230,25 @@ def test_data():
     ),
     (  # single item of build section in list
         "bl#.b1",
-        ["bv1"]
+        [
+            "bv1"
+        ]
     ),
     (  # list items of build section
         "b#.b4",
-        ["a", "b", "c"]
+        [
+            "a",
+            "b",
+            "c"
+        ]
     ),
     (  # unfolded list of build section
         "bl#.b4[]",
-        ["a", "b", "c"]
+        [
+            "a",
+            "b",
+            "c"
+        ]
     ),
     (  # unfolded list of build section first element
         "b#.b4[]",
@@ -239,10 +263,12 @@ def test_data():
     ),
     (  # dict of build section in a list
         "bl#.b5",
-        [{
-            "bk1": "bkv1",
-            "bk2": "bkv2"
-        }]
+        [
+            {
+                "bk1": "bkv1",
+                "bk2": "bkv2"
+            }
+        ]
     ),
     (  # # unfolded dict of build section as a list
         "bl#.b5[]",
@@ -257,15 +283,25 @@ def test_data():
     ),
     (  # single item of sub-import section in list
         "sl#.s1",
-        ["sv1"]
+        [
+            "sv1"
+        ]
     ),
     (  # list items of sub-import section
         "s#.s4",
-        ["a", "b", "c"]
+        [
+            "a",
+            "b",
+            "c"
+        ]
     ),
     (  # unfolded list of sub-import section
         "sl#.s4[]",
-        ["a", "b", "c"]
+        [
+            "a",
+            "b",
+            "c"
+        ]
     ),
     (  # unfolded list of sub-import section first element
         "s#.s4[]",
@@ -280,10 +316,12 @@ def test_data():
     ),
     (  # dict of sub-import section in a list
         "sl#.s5",
-        [{
-            "sk1": "skv1",
-            "sk2": "skv2"
-        }]
+        [
+            {
+                "sk1": "skv1",
+                "sk2": "skv2"
+            }
+        ]
     ),
     (  # unfolded dict of sub-import section as a list
         "sl#.s5[]",
@@ -446,12 +484,6 @@ def test_initialize_group(inv_builder, group, inv, expected):
 ])
 def test_add_element_to_group_ok(inv_builder, element_name,
                                  group_name, inventory, expected, mocker):
-    mocker.patch.object(
-        InventoryBuilder,
-        "_initialize_group",
-        return_value=inventory
-    )
-
     assert inv_builder._add_element_to_group(
         element_name,
         group_name,
@@ -460,129 +492,377 @@ def test_add_element_to_group_ok(inv_builder, element_name,
 
 
 @pytest.mark.parametrize(
-    "element_name, inventory, namespace, group_by, "
-    "group_prefix, expected",
+    "args,expected",
     [
         (
-            "item1",
-            {"_meta": {"hostvars": {}}},
-            {"import": {"i1": "iv1", "i2": "iv2"}},
-            {'.i1', '.i2'},
-            "dev_",
-            {'_meta': {'hostvars': {}},
-             'dev_iv2': {'hosts': ['item1']},
-             'dev_iv1': {'hosts': ['item1']}},
+            {
+                "element_name": "item1",
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {}
+                    }
+                },
+                "namespace": {
+                    "import": {
+                        "i1": "iv1",
+                        "i2": "iv2"
+                    }
+                },
+                "group_by": {
+                    '.i1', '.i2'
+                },
+                "group_prefix": "dev_",
+            },
+            {
+                '_meta': {
+                    'hostvars': {}
+                },
+                'dev_iv2': {
+                    'hosts': [
+                        'item1'
+                    ]
+                },
+                'dev_iv1': {
+                    'hosts': [
+                        'item1'
+                    ]
+                }
+            },
         ),
         (
-            "item2",
-            {"_meta": {"hostvars": {}}},
-            {"import": {"i2": "iv2", "i3": "iv3"}},
-            {'.i3'},
-            "",
-            {'_meta': {'hostvars': {}},
-             'iv3': {'hosts': ['item2']}},
+            {
+                "element_name": "item2",
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {}
+                    }
+                },
+                "namespace": {
+                    "import": {
+                        "i2": "iv2",
+                        "i3": "iv3"
+                    }
+                },
+                "group_by": {
+                    '.i3'
+                },
+                "group_prefix": ""
+            },
+            {
+                '_meta': {
+                    'hostvars': {}
+                },
+                'iv3': {
+                    'hosts': [
+                        'item2'
+                    ]
+                }
+            }
         ),
         (
-            "item3",
-            {"_meta": {"hostvars": {'item0': {'b0': 'bv0'}}}},
-            {"import": {"i1": "iv1", "i2": 0, "i3": "iv3"}},
-            {'.i2'},
-            "",
-            {'_meta': {'hostvars': {'item0': {'b0': 'bv0'}}},
-             '0': {'hosts': ['item3']}},
+            {
+                "element_name": "item3",
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {
+                            'item0': {
+                                'b0': 'bv0'
+                            }
+                        }
+                    }
+                },
+                "namespace": {
+                    "import": {
+                        "i1": "iv1",
+                        "i2": 0,
+                        "i3": "iv3"
+                    }
+                },
+                "group_by": {
+                    '.i2'
+                },
+                "group_prefix": ""
+            },
+            {
+                '_meta': {
+                    'hostvars': {
+                        'item0': {
+                            'b0': 'bv0'
+                        }
+                    }
+                },
+                '0': {
+                    'hosts': [
+                        'item3'
+                    ]
+                }
+            }
         ),
         (
-            "item4",
-            {"_meta": {"hostvars": {'item0': {'b0': 'bv0'}}}},
-            {"import": {"i1": "iv1", "i2": None, "i3": "iv3"}},
-            {'.i2'},
-            "",
-            {'_meta': {'hostvars': {'item0': {'b0': 'bv0'}}}},
+            {
+                "element_name": "item4",
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {
+                            'item0': {
+                                'b0': 'bv0'
+                            }
+                        }
+                    }
+                },
+                "namespace": {
+                    "import": {
+                        "i1": "iv1",
+                        "i2": None,
+                        "i3": "iv3"
+                    }
+                },
+                "group_by": {
+                    '.i2'
+                },
+                "group_prefix": ""
+            },
+            {
+                '_meta': {
+                    'hostvars': {
+                        'item0': {
+                            'b0': 'bv0'
+                        }
+                    }
+                }
+            }
         ),
         (
-            "item5",
-            {"_meta": {"hostvars": {'item0': {'b0': 'bv0'}}}},
-            {"import": {"i1": "iv1", "i2": "", "i3": "iv3"}},
-            {'.i2'},
-            "test_",
-            {'_meta': {'hostvars': {'item0': {'b0': 'bv0'}}},
-                'test_': {'hosts': ['item5']}},
-        ),
+            {
+                "element_name": "item5",
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {
+                            'item0': {
+                                'b0': 'bv0'
+                            }
+                        }
+                    }
+                },
+                "namespace": {
+                    "import": {
+                        "i1": "iv1",
+                        "i2": "",
+                        "i3": "iv3"
+                    }
+                },
+                "group_by": {
+                    '.i2'
+                },
+                "group_prefix": "test_"
+            },
+            {
+                '_meta': {
+                    'hostvars': {
+                        'item0': {
+                            'b0': 'bv0'
+                        }
+                    }
+                },
+                'test_': {
+                    'hosts': [
+                        'item5'
+                    ]
+                }
+            }
+        )
     ]
 )
-def test_execute_group_by_ok(inv_builder, element_name, group_by,
-                             group_prefix, namespace, inventory, expected):
-    assert inv_builder._execute_group_by(
-        element_index=element_name,
-        group_by=group_by,
-        group_prefix=group_prefix,
-        inventory=inventory,
-        namespaces=namespace
-    ) is None
-    assert inventory == expected
+def test_execute_group_by_ok(inv_builder, args, expected):
+    inv_builder._execute_group_by(
+        element_index=args["element_name"],
+        group_by=args["group_by"],
+        group_prefix=args["group_prefix"],
+        inventory=args["inventory"],
+        namespaces=args["namespace"]
+    )
+    assert args["inventory"] == expected
 
 
 @pytest.mark.parametrize(
-    "element_name, inventory, host_vars, namespace, expected",
+    "args, expected",
     [
         (
-            "item1",
-            {"_meta": {"hostvars": {}}},
-            [{'b1': 'b#.b2'}],
-            {"build": {"b1": "bv1", "b2": "bv2"}, "import": {}},
-            {'_meta': {'hostvars': {'item1': {'b1': 'bv2', 'b2': 'bv2'}}}},
+            {
+                "element_name": "item1",
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {}
+                    }
+                },
+                "host_vars": [
+                    {
+                        'b1': 'i#.b2'
+                    }
+                ],
+                "namespace": {
+                    "build": {},
+                    "import": {
+                        "b1": "bv1",
+                        "b2": "bv2"
+                    },
+                }
+            },
+            {
+                '_meta': {
+                    'hostvars': {
+                        'item1': {
+                            'b1': 'bv2',
+                        }
+                    }
+                }
+            }
         ),
         (
-            "item2",
-            {"_meta": {"hostvars": {}}},
-            [{'b1': 'b#.b2'}],
-            {"build": {"b1": "bv1", "b2": "bv2"}, "import": {}},
-            {'_meta': {'hostvars': {'item2': {'b1': 'bv2', 'b2': 'bv2'}}}},
+            {
+                "element_name": "item2",
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {}
+                    }
+                },
+                "host_vars": [
+                    {
+                        'b1': 'i#.b2'
+                    }
+                ],
+                "namespace": {
+                    "build": {},
+                    "import": {
+                        "b1": "bv1",
+                        "b2": "bv2"
+                    },
+                },
+            },
+            {
+                '_meta': {
+                    'hostvars': {
+                        'item2': {
+                            'b1': 'bv2',
+                        }
+                    }
+                }
+            }
         ),
         (
-            "item3",
-            {"_meta": {"hostvars": {'item0': {'b0': 'bv0'}}}},
-            [{'b2': 'b#.b1'}],
-            {"build": {"b1": "bv1", "b2": "bv2"}, "import": {}},
-            {'_meta': {'hostvars': {'item0': {'b0': 'bv0'},
-                                    'item3': {'b1': 'bv1', 'b2': 'bv1'}}}},
+            {
+                "element_name": "item3",
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {
+                            'item0': {
+                                'b0': 'bv0'
+                            }
+                        }
+                    }
+                },
+                "host_vars": [
+                    {
+                        'b2': 'i#.b1'
+                    }
+                ],
+                "namespace": {
+                    "build": {},
+                    "import": {
+                        "b1": "bv1",
+                        "b2": "bv2"
+                    },
+                },
+            },
+            {
+                '_meta': {
+                    'hostvars': {
+                        'item0': {
+                            'b0': 'bv0'
+                        },
+                        'item3': {
+                            'b2': 'bv1'
+                        }
+                    }
+                }
+            }
         ),
         (
-            "item4",
-            {"_meta": {"hostvars": {'item0': {'b0': 'bv0'}}}},
-            [{'b2': 'b#.b1'}],
-            {"build": {"b1": "bv1", "b2": "bv2"}, "import": {}},
-            {'_meta': {'hostvars': {'item0': {'b0': 'bv0'},
-                                    'item4': {'b1': 'bv1', 'b2': 'bv1'}}}},
+            {
+                "element_name": "item4",
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {
+                            'item0': {
+                                'b0': 'bv0'
+                            }
+                        }
+                    }
+                },
+                "host_vars": [
+                    {
+                        'b2': 'i#.b1'
+                    }
+                ],
+                "namespace": {
+                    "build": {},
+                    "import": {
+                        "b1": "bv1",
+                        "b2": "bv2"
+                    },
+                },
+            },
+            {
+                '_meta': {
+                    'hostvars': {
+                        'item0': {
+                            'b0': 'bv0'
+                        },
+                        'item4': {
+                            'b2': 'bv1'
+                        }
+                    }
+                }
+            }
         ),
     ])
-def test_load_element_vars_ok(element_name, inventory, host_vars,
-                              namespace, expected, inv_builder):
-    assert inv_builder._load_element_vars(
-        element_name=element_name,
-        inventory=inventory,
-        host_vars=host_vars,
-        namespaces=namespace
-    ) is None
-    assert inventory == expected
+def test_load_element_vars_ok(args, expected, inv_builder):
+    inv_builder._load_element_vars(
+        element_name=args["element_name"],
+        inventory=args["inventory"],
+        host_vars=args["host_vars"],
+        namespaces=args["namespace"]
+    )
+    assert args["inventory"] == expected
 
 
 @pytest.mark.parametrize(
-    "application,import_type,inventory,get_element_list,expected",
+    "args,expected",
     [
         (
-            "dcim",
-            "racks",
-            {"_meta": {"hostvars": {}}},
-            [
-                dict(id=1, name="item1"),
-                dict(id=2, name="item2")
-            ],
+            {
+                "application": "dcim",
+                "import_type": "racks",
+                "import_options": {},
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {}
+                    }
+                },
+                "get_element_list": [
+                    {
+                        "id": 1, "name": "item1"
+                    },
+                    {
+                        "id": 2, "name": "item2"
+                    }
+                ],
+            },
             {
                 '_meta': {
                     'hostvars': {}
                 },
-                'devices': {
+                'racks': {
                     'hosts': [
                         'item1',
                         'item2'
@@ -597,14 +877,27 @@ def test_load_element_vars_ok(element_name, inventory, host_vars,
             }
         ),
         (
-            "virtualization",
-            "racks",
-            {"_meta": {"hostvars": {}}},
-            [
-                dict(id=1, name="item1"),
-                dict(id=2, name="item2"),
-                dict(id=3, name="item3")
-            ],
+            {
+                "application": "dcim",
+                "import_type": "racks",
+                "import_options": {},
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {}
+                    }
+                },
+                "get_element_list": [
+                    {
+                        "id": 1, "name": "item1"
+                    },
+                    {
+                        "id": 2, "name": "item2"
+                    },
+                    {
+                        "id": 3, "name": "item3"
+                    }
+                ],
+            },
             {
                 '_meta': {
                     'hostvars': {}
@@ -626,14 +919,27 @@ def test_load_element_vars_ok(element_name, inventory, host_vars,
             }
         ),
         (
-            "virtualization",
-            "racks",
-            {"_meta": {"hostvars": {}}},
-            [
-                dict(id=1, name="item1"),
-                dict(id=2, name=""),
-                dict(id=3, name=None)
-            ],
+            {
+                "application": "dcim",
+                "import_type": "racks",
+                "import_options": {},
+                "inventory": {
+                    "_meta": {
+                        "hostvars": {}
+                    }
+                },
+                "get_element_list": [
+                    {
+                        "id": 1, "name": "item1"
+                    },
+                    {
+                        "id": 2, "name": ""
+                    },
+                    {
+                        "id": 3, "name": None
+                    }
+                ],
+            },
             {
                 '_meta': {
                     'hostvars': {}
@@ -641,72 +947,215 @@ def test_load_element_vars_ok(element_name, inventory, host_vars,
                 'racks': {
                     'hosts': [
                         'item1',
-                        '',
-                        None
+                        'racks_2',
+                        'racks_3',
                     ]
                 },
                 'all': {
                     'hosts': [
                         'item1',
-                        '',
-                        None
+                        'racks_2',
+                        'racks_3',
                     ]
                 }
             }
         ),
     ]
 )
-def test_execute_import_ok(inv_builder, application, inventory,
-                           import_type, get_element_list, expected, mocker):
-    import_options = inv_builder._import_section.get(application, {})\
-        .get(import_type, {})
+def test_execute_import_ok(inv_builder, args, expected, mocker):
+    import_options = (
+        inv_builder
+        ._import_section
+        .get(args["application"], {})
+        .get(args["import_type"], {})
+    )
 
     mocker.patch.object(
         InventoryBuilder,
         "_get_elements_list",
-        return_value=get_element_list
+        return_value=args["get_element_list"]
     )
 
-    assert inv_builder._execute_import(
-        application=application,
-        import_type=import_type,
-        import_options=import_options,
-        inventory=inventory
-    ) is None
+    inv_builder._execute_import(
+        application=args["application"],
+        import_type=args["import_type"],
+        import_options=args["import_options"],
+        inventory=args["inventory"]
+    )
+
+    assert args["inventory"] == expected
 
 
 @pytest.mark.parametrize(
-    "application, import_type, replacevalue, expected",
+    "args",
     [
-        (
-            "dcim",
-            "devices",
-            [],
-            []
-        ),
+        ({
+            "application": "dcim",
+            "import_options": {},
+            "host": "item1",
+            "import_type": "devices",
+            "replacevalue": {
+                "filter": [
+                    {
+                        "name": "item1",
+                        "id": 1
+                    },
+                ],
+                "get": [
+                    {
+                        "name": "item1",
+                        "id": 1
+                    },
+                ],
+                "all": [
+                    {
+                        "name": "item1",
+                        "id": 1
+                    },
+                    {
+                        "name": "item2",
+                        "id": 2
+                    }
+                ],
+            },
+            "expected": [
+                {
+                    "name": "item1",
+                    "id": 1
+                }
+            ]
+        }),
+        ({
+            "application": "dcim",
+            "import_options": {},
+            "host": "",
+            "import_type": "devices",
+            "replacevalue": {
+                "filter": [
+                    {
+                        "name": "item1",
+                        "id": 1
+                    },
+                    {
+                        "name": "item2",
+                        "id": 2
+                    }
+                ],
+                "get": [
+                    {
+                        "name": "item1",
+                        "id": 1
+                    },
+                    {
+                        "name": "item2",
+                        "id": 2
+                    }
+                ],
+                "all": [
+                    {
+                        "name": "item1",
+                        "id": 1
+                    },
+                    {
+                        "name": "item2",
+                        "id": 2
+                    }
+                ],
+            },
+            "expected": [
+                {
+                    "name": "item1",
+                    "id": 1,
+                },
+                {
+                    "name": "item2",
+                    "id": 2,
+                }
+            ]
+        }),
+        ({
+            "application": "dcim",
+            "import_options": {
+                "filters": [
+                    {
+                        "site_id": 1,
+                        "group": 1
+                    }
+                ]
+            },
+            "host": "",
+            "import_type": "devices",
+            "replacevalue": {
+                "filter": [
+                    {
+                        "name": "item1",
+                        "id": 1,
+                        "site_id": 1,
+                        "group": 1
+                    },
+                    {
+                        "name": "item2",
+                        "id": 2,
+                        "site_id": 2,
+                        "group": 1
+                    }
+                ],
+                "get": [
+                    "should not be called"
+                ],
+                "all": [
+                    {
+                        "name": "item1",
+                        "id": 1,
+                        "site_id": 1,
+                        "group": 1
+                    },
+                    {
+                        "name": "item2",
+                        "id": 2,
+                        "site_id": 2,
+                        "group": 1
+                    }
+                ],
+            },
+            "expected": [
+                {
+                    "name": "item1",
+                    "id": 1,
+                    "site_id": 1,
+                    "group": 1
+                },
+                {
+                    "name": "item2",
+                    "id": 2,
+                    "site_id": 2,
+                    "group": 1
+                }
+            ]
+        }),
     ]
 )
-def test_get_elements_list_ok(inv_builder, application, import_type, replacevalue, expected, mocker):
+def test_get_elements_list_ok(inv_builder, args, mocker):
     mocker.patch.object(
         Endpoint,
         "filter",
-        return_value=replacevalue
+        return_value=args["replacevalue"]["filter"]
     )
     mocker.patch.object(
         Endpoint,
         "all",
-        return_value=replacevalue
+        return_value=args["replacevalue"]["all"]
     )
     mocker.patch.object(
         Endpoint,
         "get",
-        return_value=replacevalue
+        return_value=args["replacevalue"]["get"]
     )
 
     returnvalue = inv_builder._get_elements_list(
-        application=application,
-        object_type=import_type,
-        import_options=inv_builder._import_section,
-        specific_host=inv_builder._host
+        application=args["application"],
+        object_type=args["import_type"],
+        import_options=args["import_options"],
+        specific_host=args["host"]
     )
-    assert returnvalue == expected
+    assert returnvalue == args["expected"]
