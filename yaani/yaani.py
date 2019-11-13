@@ -885,12 +885,20 @@ def render_inventory(render_configuration, inventory):
             except ImportError:
                 exit(error.CUSTOM_MODULE_NOT_IMPORTED, custom_module_name)
             except FileNotFoundError as err:
-                exit(error.CUSTOM_MODULE_NOT_FOUND, custom_module_name, str(err))
+                exit(
+                    error.CUSTOM_MODULE_NOT_FOUND,
+                    custom_module_name,
+                    str(err)
+                )
 
             try:
                 custom_func = getattr(custom_module, func_name)
             except AttributeError:
-                exit(error.CUSTOM_FUNC_NOT_FOUND, func_name, custom_module_name)
+                exit(
+                    error.CUSTOM_FUNC_NOT_FOUND,
+                    func_name,
+                    custom_module_name
+                )
 
             func_array.append(custom_func)
 
