@@ -2,7 +2,9 @@ import pytest
 from pynetbox.core.endpoint import Endpoint
 from yaani.yaani import (
     InventoryBuilder,
-    resolve_expression)
+    resolve_expression,
+    error
+)
 
 
 @pytest.fixture
@@ -108,6 +110,19 @@ def init_inventory():
 
 
 @pytest.fixture
+def test_data():
+    return {
+        "a": 1,
+        "b": 2,
+        "c": 3,
+        "d": None,
+        "e": {
+            "e_a": "test value"
+        }
+    }
+
+
+@pytest.fixture
 def inv_builder(cli_args, config):
     return InventoryBuilder(cli_args, config)
 
@@ -144,20 +159,7 @@ def test_get_identifier_ko(inv_builder, host, obj_type):
     """Test the get_identifier method raises an error when it should"""
     with pytest.raises(SystemExit) as err:
         inv_builder._get_identifier(host, obj_type)
-    assert 5 == err.value.code
-
-
-@pytest.fixture
-def test_data():
-    return {
-        "a": 1,
-        "b": 2,
-        "c": 3,
-        "d": None,
-        "e": {
-            "e_a": "test value"
-        }
-    }
+    assert error.CANNOT_COMPUTE_GEN_ID["code"] == err.value.code
 
 
 @pytest.mark.parametrize("key_path,expected", [
@@ -175,15 +177,25 @@ def test_data():
     ),
     (  # single item of import section in list
         "il#.i1",
-        ["iv1"]
+        [
+            "iv1"
+        ]
     ),
     (  # list items of import section
         "i#.i4",
-        ["a", "b", "c"]
+        [
+            "a",
+            "b",
+            "c"
+        ]
     ),
     (  # unfolded list of import section
         "il#.i4[]",
-        ["a", "b", "c"]
+        [
+            "a",
+            "b",
+            "c"
+        ]
     ),
     (  # unfolded list of import section first element
         "i#.i4[]",
@@ -198,10 +210,12 @@ def test_data():
     ),
     (  # dict of import section in a list
         "il#.i5",
-        [{
-            "ik1": "ikv1",
-            "ik2": "ikv2"
-        }]
+        [
+            {
+                "ik1": "ikv1",
+                "ik2": "ikv2"
+            }
+        ]
     ),
     (  # unfolded dict of import section as a list
         "il#.i5[]",
@@ -216,15 +230,25 @@ def test_data():
     ),
     (  # single item of build section in list
         "bl#.b1",
-        ["bv1"]
+        [
+            "bv1"
+        ]
     ),
     (  # list items of build section
         "b#.b4",
-        ["a", "b", "c"]
+        [
+            "a",
+            "b",
+            "c"
+        ]
     ),
     (  # unfolded list of build section
         "bl#.b4[]",
-        ["a", "b", "c"]
+        [
+            "a",
+            "b",
+            "c"
+        ]
     ),
     (  # unfolded list of build section first element
         "b#.b4[]",
@@ -239,10 +263,12 @@ def test_data():
     ),
     (  # dict of build section in a list
         "bl#.b5",
-        [{
-            "bk1": "bkv1",
-            "bk2": "bkv2"
-        }]
+        [
+            {
+                "bk1": "bkv1",
+                "bk2": "bkv2"
+            }
+        ]
     ),
     (  # # unfolded dict of build section as a list
         "bl#.b5[]",
@@ -257,15 +283,25 @@ def test_data():
     ),
     (  # single item of sub-import section in list
         "sl#.s1",
-        ["sv1"]
+        [
+            "sv1"
+        ]
     ),
     (  # list items of sub-import section
         "s#.s4",
-        ["a", "b", "c"]
+        [
+            "a",
+            "b",
+            "c"
+        ]
     ),
     (  # unfolded list of sub-import section
         "sl#.s4[]",
-        ["a", "b", "c"]
+        [
+            "a",
+            "b",
+            "c"
+        ]
     ),
     (  # unfolded list of sub-import section first element
         "s#.s4[]",
@@ -280,10 +316,12 @@ def test_data():
     ),
     (  # dict of sub-import section in a list
         "sl#.s5",
-        [{
-            "sk1": "skv1",
-            "sk2": "skv2"
-        }]
+        [
+            {
+                "sk1": "skv1",
+                "sk2": "skv2"
+            }
+        ]
     ),
     (  # unfolded dict of sub-import section as a list
         "sl#.s5[]",
@@ -446,12 +484,6 @@ def test_initialize_group(inv_builder, group, inv, expected):
 ])
 def test_add_element_to_group_ok(inv_builder, element_name,
                                  group_name, inventory, expected, mocker):
-    mocker.patch.object(
-        InventoryBuilder,
-        "_initialize_group",
-        return_value=inventory
-    )
-
     assert inv_builder._add_element_to_group(
         element_name,
         group_name,
