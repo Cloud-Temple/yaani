@@ -26,6 +26,8 @@ import pyjq
 # configuration file
 DEFAULT_ENV_CONFIG_FILE = "YAANI_CONFIG_FILE"
 DEFAULT_ENV_MODULES_DIR = "YAANI_MODULES_PATH"
+DEFAULT_ENV_API_URL = "YAANI_NETBOX_URL"
+DEFAULT_ENV_API_TOKEN = "YAANI_NETBOX_TOKEN"
 
 
 class error:
@@ -97,6 +99,10 @@ class error:
             "unique. Try using a different variable name as index."
         ),
         "code": 14
+    }
+    NO_API_CONFIGURATION = {
+        "msg": "The Netbox API configuration is missing",
+        "code": 15
     }
 
 
@@ -691,7 +697,6 @@ def validate_configuration(configuration):
             "netbox": {
                 "type": "object",
                 "description": "The base key of the configuration file",
-                "required": ["api"],
                 "additionalProperties": False,
                 "properties": {
                     "api": {
@@ -836,6 +841,19 @@ def load_config_file(config_file_path):
     # If syntax of configuration file is valid, nothing happens
     # Beware, syntax can be valid while semantic is not
     validate_configuration(parsed_config)
+
+    # Inject API configuration from env var if not set in the config file
+    if parsed_config['netbox'].get('api', None) is None:
+        api_url = os.getenv(DEFAULT_ENV_API_URL, None)
+        api_token = os.getenv(DEFAULT_ENV_API_TOKEN, None)
+
+        if api_url is None:
+            exit(error.NO_API_CONFIGURATION)
+        else:
+            parsed_config['netbox']['api'] = {}
+            parsed_config['netbox']['api']['url'] = api_url
+            if api_token is not None:
+                parsed_config['netbox']['api']['token'] = api_token
 
     return parsed_config
 

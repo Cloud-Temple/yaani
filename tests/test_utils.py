@@ -573,7 +573,6 @@ def test_validate_api_ko(arg):
 ])
 def test_validate_import_ok(api_config, arg):
     # full api section with import section
-    arg["netbox"]["api"] = api_config
     assert validate_configuration(arg) is None
 
 
@@ -773,7 +772,6 @@ def test_validate_import_ok(api_config, arg):
 ])
 def test_validate_import_ko(api_config, arg):
     # full api section with import section
-    arg["netbox"]["api"] = api_config
     with pytest.raises(SystemExit) as err:
         validate_configuration(arg)
     assert (
@@ -822,7 +820,6 @@ def test_validate_import_ko(api_config, arg):
     }),
 ])
 def test_validate_render_ok(api_config, import_config, arg):
-    arg["netbox"]["api"] = api_config
     arg["netbox"]["import"] = import_config
     assert validate_configuration(arg) is None
 
@@ -851,7 +848,6 @@ def test_validate_render_ok(api_config, import_config, arg):
 ])
 def test_validate_render_ko(api_config, import_config, arg):
     # full api section with import section
-    arg["netbox"]["api"] = api_config
     arg["netbox"]["import"] = import_config
     with pytest.raises(SystemExit) as err:
         validate_configuration(arg)
