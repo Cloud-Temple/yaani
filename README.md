@@ -17,8 +17,7 @@ optional arguments:
                         environment variable or netbox.yml in the current dir.
   --list                Print the entire inventory with hostvars respecting
                         the Ansible dynamic inventory syntax.
-  --host HOST           Print specific host vars as Ansible dynamic inventory
-                        syntax.
+  --host HOST           Return an empty inventory.
 ```
 
 ## Getting started
@@ -36,7 +35,7 @@ make install
 ```
 
 In case make is not installed, simply run:
-```pip3 install -r requirements.txt```
+```pip install -r requirements.txt```
 
 ### Requirements
 
